@@ -159,5 +159,23 @@ JavaEE：是在JavaSE基础上为企业级应用定义的规范集合（而非�
 
 
 
-git clone https://github.com/kevinxiaomanong/note-share.git
+### JVM JRE JDK
+
+JVM针对不同系统（windows、mac、linux）有特定实现，用来运行java字节码，很多其他语言例如Kotlin、Jruby通过各自编译器编译成.class文件并最终在JVM不同平台上运行，而JVM不止有一种，只要满足JVM规范都可以开发，目前使用最广的是HotSpot虚拟机
+
+JRE是运行已编译Java程序所需环境，包含JVM和Java基础类库Class Library两部分
+
+而JDK是一个功能齐全的Java开发工具包，包含JRE以及编译器javac和其他工具
+
+
+
+
+
+
+
+
+
+
+
+
 
