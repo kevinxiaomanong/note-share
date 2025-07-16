@@ -10,6 +10,7 @@ centos7已经到达其声明周期终点EOL，即官方不再提供更新和支�
 
 
 
+
 发现流水线跑镜像跑不通 可以在本地用 这个是intall阶段的命令
 
 npm install --proxy=$PROXY --https-proxy=$PROXY --noproxy=$NO_PROXY --unsafe-perm复现
