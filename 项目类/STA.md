@@ -273,7 +273,7 @@ SIN-AWS到SH 链路也是先AWS->HK: 公网 然后HK->SH 专线 这也是默认�
 
 ## 六、代码优化
 
-1、http客户端连接参数
+**1、http客户端连接参数**
 
 ```
 PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
@@ -650,6 +650,97 @@ Springboot将常见场景的Bean注册逻辑封装成自动配置类，开发者
 
 
 
+**13、ThreadLocal线程隔离存储当前market信息**
+
+ThreadLocal（线程本地变量）是Java一种线程隔离机制，
+
+```
+    private static ThreadLocal<List<String>> MARKET_HOLDER = new ThreadLocal<>();
+   
+```
+
+存储当前线程的market列表，核心是让每个线程持有自己的变量副本，其底层依赖Thread类里一个特殊的成员变量threadLocals（类型为ThreadLocalMap），存储该线程所有ThreadLocal变量
+
+ThreadLocalMap则是以ThreadLocal实例为key，以线程私有变量为value
+
+线程隔离的本质：每个请求由Tomcat的一个独立线程处理，实现请求之间market隔离
+
+
+
+**为什么需要？**
+
+在Web场景，多个请求会被不同线程同时处理，market是请求级别的参数
+
+- 如果是全局普通变量来存储，会导致线程安全问题（线程A的market可能被线程B覆盖）
+- 如果通过方法参数来传递market会导致代码冗余
+
+而ThreadLocal+Request拦截器很好的解决了这个问题
+
+
+
+**注意点**
+
+使用ThreadLocal要注意内存泄漏问题（线程结束后，threadLocals中数据未被清理，长期占用内存）
+
+Tomcat等web服务器的线程是线程池复用的（线程不会随请求结束而销毁，会被重新用于处理新请求）
+
+并且ThreadLocalMap的key是弱引用，value是强引用，可能导致value无法被回收
+
+
+
+这里聊下弱引用：当JVM进行GC的时候无论内存是否充足都会回收被弱引用关联的对象
+
+两个问题：
+
+1、为什么value是强引用可能导致无法回收
+
+当key（ThreadLocal实例）被GC后，value仍然被ThreadLocalMap的Entry强引用，如果线程长期存活比如说是Tomcat的核心线程，那么value会一直占用内存
+
+```
+public class MarketContext {
+    private static ThreadLocal<List<String>> MARKET_HOLDER = new ThreadLocal<>();
+    public static void setMarket(List<String> marketList) {
+        MARKET_HOLDER.set(marketList);
+    }
+    public static List<String> getMarket() {
+        return MARKET_HOLDER.get();
+    }
+    public static void clear() {
+        MARKET_HOLDER.remove();
+    }
+}
+```
+
+目前MARKET_HOLDER被MarketContext类的静态变量强引用，因此key（MARKET_HOLDER）不会被GC回收，因为有强引用，可如果MARKET_HOLDER被重新赋值或是MarketContext类被卸载，那么MARKET_HOLDER被回收了以后，ThreadLocalMap中对应的Entry的key变为null，但Entry对value的引用是强引用，且线程可能长期存活，形成了一条Thread-->ThreadLocalMap-->Entry-->value因此无法被GC回收，即使已经没有实际用途还存在内存中
+
+而我们通过在afterCompletion中调用了ThreadLocal.remove()，相当是在当前线程直接清除了ThreadLocalMap中对应的Entry（key和value），这也是ThreadLocal使用的黄金原则：“用完必须手动清理”
+
+
+
+2、为什么ThreadLocalMap里Entry里的key是WeekReference呢？
+
+即如果你的代码中不再使用ThreadLocal对象，但Threads里的ThreadLocalMap的key仍然指向它，那么不再被需要的ThreadLocal会一直被持有无法被GC，设计为弱引用可以让外部没有强引用指向ThreadLocal对象时GC回收掉，回收之后Thread里的ThreadLocalMap中的key变为null
+
+
+
+3、ThreadLocalMap里的key实现
+
+ThreadLocalMap里的Entry其实不是普通HashMap的键值对结构，它通过继承WeakReference<ThreadLocal<?>>实现了对ThreadLocal实例的弱引用
+
+引用描述的是一个对象是怎么引用另一个对象的，而一个对象可以同时持有多种引用类型，就像一个人一样，可以弱握着一根香蕉的同时可以硬握着一个苹果，这是一个道理
+
+
+
+4、日常开发中弱引用怎么引入
+
+
+
+
+
+
+
+
+
 
 
 
@@ -658,11 +749,49 @@ Springboot将常见场景的Bean注册逻辑封装成自动配置类，开发者
 
 前端如何做限流？
 
+阿联酋迪拜+阿布扎比7日跟团游·【全景体验 让你省心】登顶棕榈岛52层&世界奇迹全览+卢浮宫+总统府+大清真寺+复古木船游河+古堡集市等全部入内|打卡双地标：迪拜塔&金相框|沙迦文化精髓深度游|国际5钻酒店|纯玩含小费 A线
+
+ight UAE group tour: Dubai + Abu Dhabi + Sharjah + Ajman four-country tour - Route B
+
+p tour in Dubai + Abu Dhabi, UAE - [Comprehensive experience for your convenience] Ascend to the 52nd floor of Palm Island & explore world wonders + Louvre Abu Dhabi + Presidential Palace + Grand Mosque + traditional dhow cruise + visit to Al Seef Heritage Market | Visit two landmarks: Burj Khalifa & Dubai Frame | In-depth cultural tour of Sharjah | International 5-diamond hotels | All-inclusive with tips - Route A
+
+
+
+阿联酋7日5晚跟团游·迪拜+阿布扎比+沙迦+阿治曼四国游 B_B线
+
+ight UAE group tour: Dubai + Abu Dhabi + Sharjah + Ajman four-country tour - Route B
 
 
 
 
 
+maxQps 已线下沟通，实际会低于10
+
+测试环境token: 100055203-TEST-faf27a76
+ 生产环境 token: 100055203-PROD-cbfaba44
 
 
 
+![image-20250814135203685](D:\编程文档\note-share\项目类\assets\image-20250814135203685.png)
+
+
+
+现在线上翻译有问题，需要你修改你怎么做？
+
+首先消费这个是需要支持修改的
+
+
+
+
+
+ight UAE group tour: Dubai + Abu Dhabi + Sharjah + Ajman four-country tour - Route B
+
+p tour of Dubai and Abu Dhabi, UAE · Palm Island Observation Deck 52nd floor + Louvre + Presidential Palace + Grand Mosque all included + Abra boat experience | Visit Burj Khalifa & Dubai Frame | Explore Sharjah Museum of Islamic Civilization + Iran Town | 5-diamond hotels throughout | Tips included (Option B)
+
+
+
+ight group tour to Dubai + Abu Dhabi, UAE - [Official Flagship Recommended] High meal inclusion rate*Includes desert safari*Palm Island luxury car tour*EK direct flight | International 5-diamond hotel | Louvre Museum entry + Dubai Creek cruise | Full-day free time in Dubai | Includes guide service + hotel tax | Selected departures receive complimentary Lost Chambers Aquarium
+
+
+
+100055203-c0a83201-487542-2000046
