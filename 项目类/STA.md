@@ -9,21 +9,23 @@ prd：http://conf.ctripcorp.com/display/dsjyaiyy/STA+Marketing+Campaign+Performa
 
 UI：https://www.figma.com/design/GwYuojd6mPzSyYbTsBnt4Q/%E8%BF%AA%E6%8B%9C%E6%95%B0%E6%8D%AE%E5%A4%A7%E5%B1%8F?node-id=316-2052&p=f&t=oUYZdlPQrj0qBWSC-0
 
-
-
 STA前端应用：https://captain.release.ctripcorp.com/app/100055477/info
 
 后端应用：https://captain.release.ctripcorp.com/app/100055203/info
-
-
 
 TRIP登录：https://pages.release.ctripcorp.com/ibu-gcc-group/ibu-account-group-doc/accounts/url.html
 
 
 
-
-
 测试环境查找验证码：http://databank.fws.qa.nt.ctripcorp.com/DataBank/LoginRegister.jsp
+
+
+
+STA二期PRD：https://trip.larkenterprise.com/wiki/ZNTMwHSiSiw76Gk5gQUcYpd8nJe
+
+
+
+
 
 
 
@@ -735,6 +737,12 @@ ThreadLocalMap里的Entry其实不是普通HashMap的键值对结构，它通过
 
 
 
+**14、本地缓存**
+
+这里可以针对getMonth()做一个优化
+
+
+
 
 
 
@@ -795,3 +803,242 @@ ight group tour to Dubai + Abu Dhabi, UAE - [Official Flagship Recommended] High
 
 
 100055203-c0a83201-487542-2000046
+
+
+
+
+
+## 八、优化点记录
+
+1、考虑引入本地缓存，降低Daas调用频率，保护sr集群，同时提升性能
+
+本地缓存的实现方案要么是HashMap手动实现（考虑线程安全&过期处理）或是比较成熟的库（Guava Cache、Caffeine）这些库已经封装了过期策略和并发控制，稳定性更好
+
+**缓存操作：**
+
+查询缓存，如果存在且未过期则返回；否则调用daas接口获取数据更新缓存后返回，同时要处理并发问题（缓存穿透/击穿），击穿可用互斥锁或Caffeine的load方法（自动处理并发加载）即只有一个线程去加载其他线程等待
+
+**缓存结构**
+
+key（请求参数序列化后的字符串）
+
+value（接口返回数据） 过期时间1小时 Caffeine支持写入后多久过期
+
+**容量限制**
+
+避免内存溢出，当超过时使用淘汰策略
+
+
+
+2、关于stream流的写法
+
+背景：在STA T站我们有两种写法
+
+```
+return searchOrderVtoList.stream().map(StaTripSearchOrder::format).sorted()
+                .collect(Collectors.groupingBy(StaTripSearchOrder::getLocale));
+```
+
+
+
+```
+ return staTripDecisions.stream().collect(Collectors.groupingBy(StaTripDecision::getLocale,
+                        Collectors.collectingAndThen(
+                                Collectors.toList(),
+                                list -> {
+                                    list.sort(StaTripDecision.bizMonthComparator());
+                                    return list;
+                                }
+                        )
+                ));
+```
+
+我们分析一下这两种写法是否都能保证返回List的有序性呢？
+
+--其实不然，sorted()是在groupingby之前执行的只是保证进入分组前整个流的顺序，分组过程会破坏之前的排序
+
+第二种写法collectingAndThen在每个分组完成后执行了排序，为每个分组的List单独调用了sort方法
+
+而且Java Stream API不保证groupingBy收集器会按照元素进入的顺序处理，可能重新排序或并行处理元素
+
+
+
+因此我们来学习一下Stream API里的一些写法Collector，作用是对另外一个收集器的结果进行二次处理
+
+允许我们再收集操作结束后，对最终结果执行一个额外的转换或处理步骤
+
+```
+public static <T, A, R, RR> Collector<T, A, RR> collectingAndThen(
+    Collector<T, A, R> downstream,  // 基础收集器（先执行的收集操作）
+    Function<R, RR> finisher        // 对收集结果的二次处理函数
+)
+```
+
+这是我们的用法：使用 `groupingBy` 分组后，若需要对每个分组的结果做转换（如转为不可变集合），可嵌套 `collectingAndThen`：
+
+
+
+**Java Stream操作优化**
+
+Stream流属于Java8引入的核心特性，设计初衷是为了简化集合的批量数据处理，通过声明式API提高代码可读性和可维护性，且天然支持并行处理以提升大数据量下的效率
+
+将数据源（如集合、数组）转换为流，通过一系列 “中间操作” 构建处理管道，最终通过 “终端操作” 得到结果
+
+中间操作可被优化（如合并、短路），提升效率，其实有点类似Flink
+
+
+
+重要：Stream 的**中间操作是 “惰性的”**—— 仅当终端操作被调用时，中间操作才会实际执行。这种设计允许 Stream 优化处理过程（如合并操作、提前终止）。
+
+
+
+无状态与有状态操作分离：
+
+中间操作分无状态和有状态两种，这种区分是为了优化并行处理
+
+- 无状态操作：每个元素的处理不依赖其他元素（filter、map），可独立并行处理
+- 有状态操作：处理某元素可能依赖其他元素（sort、distinct、limit）并行时需要额外协调成本
+
+stream可以通过 `parallelStream()` 或 `stream().parallel()` 转换为并行流，其内部基于Fork/Join框架自动拆分数据、分配多线程最终合并，极大简化了并行编程
+
+
+
+
+
+**Stream流操作分类**
+
+1、创建流
+
+- 基于集合/数组
+- 自己传入参数
+
+2、中间操作
+
+- flatMap（扁平处理），即将T扁平成stream子流，会自动合并进入主流
+- peek 只用来遍历元素
+
+3、终端操作
+
+- count 统计元素数量
+- forEach（Consumer） 遍历元素 无返回值
+- sum/max/min 需要先转换为数值
+- match类（anyMatch/allMatch/nonMatch）
+- find类（findFirst、findAny）
+- reduce类（归约）将元素合并成单个结果
+- collect(Collector):收集流结果（如转集合、分组等）
+
+Stream 的处理过程可分为**三个阶段**：**创建流 → 中间操作链 → 终端操作**
+
+要注意终端操作执行后，Stream就被消费了，无法再次使用否则会抛IllegalStateException
+
+
+
+其中Collector这个接口比较复杂，封装了收集过程的四个核心步骤：
+
+1. 创建容器 supplier
+2. 累加元素accumulator
+3. 合并容器 combiner
+4. 转换结果 finisher
+
+JDK提供了很多Collectors工具类，内置了大量常用收集器，主要场景有：
+
+1. 基础收集：转为集合或数组
+2. 聚合统计类  （大多是转数值后分析）
+3. 分组与分区
+
+- 分组 groupingBy 按某个属性将元素分为多个组
+
+groupingBy(Function)  groupingBy(Function, Collector)
+
+partitioningBy(Predicate)
+
+- 分区 partitioningBy 按boolean条件分为两组
+
+4、字符串处理 即将流中的字符串元素拼接成一个字符串
+
+支持直接/分隔符 拼接
+
+5、collectingAndThen二次转换与包装
+
+如果是很复杂的场景还可以通过Collector.of()去自定义收集器
+
+
+
+**踩坑点：peek**
+
+```
+List<String> collect = Stream.of("zh-CN", "en-US", "fr-FR")
+                .peek(s -> s.replace("-", "_"))
+                .collect(Collectors.toList());
+List<StaTripHtlIndex> staTripHtlIndexList = safeGet(htlIndexFuture, Collections.emptyList()).stream()
+                .peek(staTripHtlIndex -> staTripHtlIndex.setLocale(localeMarketMap.get(staTripHtlIndex.getLocale())))
+                .map(StaTripHtlIndex::processFormat).collect(Collectors.toList());
+```
+
+这两次peek一个成功修改了对象的属性 一个却没有
+
+这其实是取决于元素本身是否是“可变对象”：
+
+- peek的作用 主要是消费流元素，如果元素是可变对象，peek中可修改对象的属性，因为操作的是对象本身，但像String这种不可变对象，不可变对象的操作会返回新对象，原对象不变
+
+以s -> s.replace(...)为例，只是调用了方法并生成了新对象，但没有将新对象替换回流中，流中依然是原来的String对象，因此如果你需要修改String等不可变对象需要用map操作，因为map会将函数返回值作为流的新元素去替换
+
+
+
+3、代码优化 简洁
+
+使用peek优化
+
+
+
+
+
+## 二期需求点：
+
+STA二期PRD：https://trip.larkenterprise.com/wiki/ZNTMwHSiSiw76Gk5gQUcYpd8nJe
+
+
+
+好的那总结一下开发工作： 
+
+1、STA C站+T站外部看板大改 （前端加菜单页切换） 
+
+2、外站营销活动数据上传&展示（存储用户上传数据无系数处理） 
+
+3、清单工具实现（要求PAX倒序、时间段、随机三种筛选+清单实时效果预览） 
+
+4、营销活动数据调节器（分locale+自然月维度 实时效果预览） 
+
+5、PKG翻译审批流（接入飞书审批或开发审批系统+支持用户编辑翻译结果）
+
+
+
+审批的话可以看看文档：
+
+https://trip.larkenterprise.com/wiki/CIgIw5MCIidxYsk0RvAcRd43n1d
+
+
+
+
+
+方案更新：
+
+- 分销&代理客户的剔除 不走8605综合代理 机票和酒店有各自的逻辑来判断机酒uid是不是分销和代理（OI好像可以判分销）
+- 关联订单范围关联这里逻辑确认（怎么去捞） 就是要确认一下这个时间范围，要去了解OI关单接口的逻辑，看是否需要我们进行二次处理
+
+
+
+接入
+
+
+
+[{"locale":"de","market":"Germany"},{"locale":"ru","market":"Russia"},{"locale":"hk","market":"Hong Kong"},{"locale":"ae","market":"United Arab Emirates"},{"locale":"ch","market":"Switzerland"},{"locale":"jp","market":"Japan"},{"locale":"kr","market":"South Korea"},{"locale":"it","market":"Italy"},{"locale":"fr","market":"France"},{"locale":"my","market":"Malaysia"},{"locale":"es","market":"Spain"},{"locale":"th","market":"Thailand"},{"locale":"sg","market":"Singapore"},{"locale":"au","market":"Australia"},{"locale":"gb","market":"United Kingdom"},{"locale":"id","market":"Indonesia"},{"locale":"us","market":"United States"},{"locale":"nl","market":"Netherlands"},{"locale":"ca","market":"Canada"},{"locale":"tr","market":"Turkey"}]
+
+
+
+
+
+
+
+
+
