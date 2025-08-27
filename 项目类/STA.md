@@ -991,8 +991,6 @@ List<StaTripHtlIndex> staTripHtlIndexList = safeGet(htlIndexFuture, Collections.
 
 
 
-
-
 ## 二期需求点：
 
 STA二期PRD：https://trip.larkenterprise.com/wiki/ZNTMwHSiSiw76Gk5gQUcYpd8nJe
@@ -1013,30 +1011,94 @@ STA二期PRD：https://trip.larkenterprise.com/wiki/ZNTMwHSiSiw76Gk5gQUcYpd8nJe
 
 
 
-审批的话可以看看文档：
+### 2.1 迁移&改造
 
-https://trip.larkenterprise.com/wiki/CIgIw5MCIidxYsk0RvAcRd43n1d
+我们把之前DET系数调节的接口都迁移到新应用上面
 
+这样fws 工具类的请求为：
 
+fws：http://bdsci.overseas.fat0.tripqate.com/OverseasDest/tool/***
 
-
-
-方案更新：
-
-- 分销&代理客户的剔除 不走8605综合代理 机票和酒店有各自的逻辑来判断机酒uid是不是分销和代理（OI好像可以判分销）
-- 关联订单范围关联这里逻辑确认（怎么去捞） 就是要确认一下这个时间范围，要去了解OI关单接口的逻辑，看是否需要我们进行二次处理
+prod: 可以申请一个新的域名
 
 
 
-接入
+新起一个工具前端应用 去取代之前的
+
+fws：http://bdsci.overseas.fat0.tripqate.com/internal/tool
 
 
 
-[{"locale":"de","market":"Germany"},{"locale":"ru","market":"Russia"},{"locale":"hk","market":"Hong Kong"},{"locale":"ae","market":"United Arab Emirates"},{"locale":"ch","market":"Switzerland"},{"locale":"jp","market":"Japan"},{"locale":"kr","market":"South Korea"},{"locale":"it","market":"Italy"},{"locale":"fr","market":"France"},{"locale":"my","market":"Malaysia"},{"locale":"es","market":"Spain"},{"locale":"th","market":"Thailand"},{"locale":"sg","market":"Singapore"},{"locale":"au","market":"Australia"},{"locale":"gb","market":"United Kingdom"},{"locale":"id","market":"Indonesia"},{"locale":"us","market":"United States"},{"locale":"nl","market":"Netherlands"},{"locale":"ca","market":"Canada"},{"locale":"tr","market":"Turkey"}]
+那我们首先要把之前的服务迁移到后端服务上面
+
+
+
+换个思路：
+
+我们不影响之前的请求
 
 
 
 
+
+我们先列一下后端有哪些需要迁移：
+
+1. 系数调节相关
+
+```
+DetCoefficientController
+```
+
+我们依赖要迁移这个类下的接口
+
+依赖项：
+
+```
+DetCoefficientService
+```
+
+```
+DetDataService
+```
+
+
+
+我们还是新起了一个工具后端应用：
+
+```
+use bdcoefficientdb;
+CREATE TABLE `ctrip_order_operate` ( 
+id bigint NOT NULL AUTO_INCREMENT COMMENT '主键id' ,
+operator varchar(50) NULL default NULL COMMENT '操作人' ,
+operateTime varchar(50) NULL default NULL COMMENT '操作人' ,
+datachange_lasttime datetime(3)  NOT NULL default CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间' ,
+PRIMARY KEY (id),
+KEY ix_datachange_lasttime(datachange_lasttime),
+)  DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='C站订单明细表';
+
+```
+
+索引设计主要取决于查询模式：
+
+1、会根据订单id、站点、产线、城市、下单日期查询 
+
+2、根据PAX 间夜量 票量去排序
+
+3、根据bizMonth+id_deleted去分析PAX和GMV
+
+
+
+单字段在多条件查询时可能效率不高，联合索引的设计需要遵循最左前缀原则，把过滤性高（区分度大）的字段放在前面，此外不要过度索引，会增加写入的开销占用存储空间，只需要为常用的查询条件创建索引即可
+
+
+
+这里注意一个概念，过滤性高的应该是高基数字段过滤性更强
+
+
+
+针对WHERE/ORDER/GROUP字段建立索引，此外注意避免冗余索引（即如果已存在联合索引a/b 则无需单独为a建索引）
+
+is_deleted这个逻辑删除字段几乎所有查询都会携带，因此如果数据量大缺少索引可能走全表扫描，但is_deleted=0的记录占据大多数，单字段的索引效果很有限，建议与其他高频字段组成联合索引
 
 
 
