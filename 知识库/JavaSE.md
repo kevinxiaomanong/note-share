@@ -99,10 +99,6 @@ both -- 两个任务都完成
 
 # JavaGuide
 
-
-
-
-
 ## JavaSE上
 
 write once，run anywhere是早期java的宣传口号，Java通过字节码+虚拟机的技术实现了跨平台性
