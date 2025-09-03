@@ -56,7 +56,158 @@ SpringBoot3+&Spring6 对虚拟线程提供了原生支持，只需要setThreadFa
 
 
 
-### Java如何调用C程序？本地方法栈&线程栈
+### 手写Java线程池
+
+```
+package org.elon.thread;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+
+/**
+ * 优化点：
+ * 1、在execute里 我们再启动一个线程后马上尝试将任务放入队列，这可能导致：
+ * 新线程尚未开始从队列消费任务 导致任务无法加入队列从而触发拒绝策略
+ * 我们应该让新创建的线程直接处理当前任务，而非先将任务放入队列
+ * 这其实和JDK的ThreadPoolExecutor的工作原理类似
+ */
+public class SimpleThreadPool {
+
+    private final BlockingQueue<Runnable> taskQueue;
+
+    private final List<WorkerThread> workers;
+
+    private final int corePoolSize;
+
+    private final int maxPoolSize;
+
+    private final long keepAliveTime;
+
+    private volatile boolean isShutdown;
+
+    @FunctionalInterface
+    public interface RejectedExecutionHandler {
+        void rejectedExecution(Runnable r, SimpleThreadPool executor);
+    }
+
+    private RejectedExecutionHandler rejectedExecutionHandler = (r, executor) -> {
+        throw new RuntimeException("任务" + r + "被拒绝执行,线程池已达最大容量");
+    };
+
+    public SimpleThreadPool(int corePoolSize, int maxPoolSize, long keepAliveTime, int queueCapacity) {
+        this.corePoolSize = corePoolSize;
+        this.maxPoolSize = maxPoolSize;
+        this.keepAliveTime = keepAliveTime;
+        this.taskQueue = new LinkedBlockingQueue<>(queueCapacity);
+        this.workers = new ArrayList<>(maxPoolSize);
+        this.isShutdown = false;
+        for (int i = 0; i < corePoolSize; i++) {
+            WorkerThread worker = new WorkerThread();
+            workers.add(worker);
+            worker.start();
+        }
+    }
+
+    public void shutdown() {
+        isShutdown = true;
+        for (WorkerThread worker : workers) {
+            worker.interrupt();
+        }
+    }
+    public void setRejectedExecutionHandler(RejectedExecutionHandler handler) {
+        if (handler != null) {
+            this.rejectedExecutionHandler = handler;
+        }
+    }
+
+    public void execute(Runnable task) {
+        if(isShutdown){
+            throw new IllegalStateException("threadpool is already shutdown");
+        }
+        boolean added = taskQueue.offer(task);
+
+        if(added){
+            return;
+        }
+
+        synchronized (workers) {
+            if(workers.size()<maxPoolSize){
+                WorkerThread workerThread = new WorkerThread(task);
+                workers.add(workerThread);
+                workerThread.start();
+                return;
+            }
+        }
+        rejectedExecutionHandler.rejectedExecution(task, this);
+    }
+
+    private class WorkerThread extends Thread {
+
+        private Runnable initialTask;
+
+        public WorkerThread() {
+            this(null);
+        }
+
+        public WorkerThread(Runnable initialTask) {
+            this.initialTask = initialTask;
+        }
+
+
+        @Override
+        public void run() {
+            if(initialTask!=null){
+                try{
+                    initialTask.run();
+                }catch (Exception e){
+                    System.out.println("任务执行出错：" + e.getMessage());
+                }
+            }
+
+            while (!isInterrupted()) {
+
+                try {
+                    Runnable task;
+
+                    if (workers.indexOf(this) < corePoolSize) {
+                        task = taskQueue.take();
+                    } else {
+                        task = taskQueue.poll(keepAliveTime, java.util.concurrent.TimeUnit.MILLISECONDS);
+                    }
+
+                    if (task != null) {
+                        try {
+                            task.run();
+                        } catch (Exception e) {
+                            System.out.println("任务执行出错：" + e.getMessage());
+                        }
+                    } else {
+                        if (workers.indexOf(this) >= corePoolSize) {
+                            synchronized (workers) {
+                                workers.remove(this);
+                            }
+                            break;
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+    }
+
+}
+```
+
+
+
+
+
+
+
+
 
 
 
