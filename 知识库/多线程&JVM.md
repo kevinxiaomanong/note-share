@@ -201,27 +201,25 @@ public class SimpleThreadPool {
 }
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+```
+public void submit(Runnable task) {
+    if(isStoped){
+        throw new IllegalStateException("threadpool has stopped");
+    }
+    boolean isAdded = queue.add(task);
+    if (!isAdded) {
+        synchronized (workThreadList){
+            if (workThreadList.size() < maxPoolSize) {
+                WorkThread workThread = new WorkThread(false);
+                workThreadList.add(workThread);
+                workThread.start();
+                return;
+            }
+        }
+        throw new RuntimeException("Task Queue is full! workers is max");
+    }
+}
+```
 
 
 

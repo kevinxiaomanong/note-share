@@ -1202,6 +1202,52 @@ B+树的每个节点在物理存储上都对应一个或多个磁盘页（默认
 
 
 
+数仓
+
+1、Market ---> Business Unit  (Auto Populated)
+
+
+
+活动：
+
+站内站外放一起
+
+C站直接读mysql外站表+系数表
+
+T站内：Daas接口下载
+
+
+
+订单明细：
+
+读订单明细表
+
+
+
+6保留Excel结构即可 无数据
+
+
+
+7保留结构
+
+
+
+8 T写死Saudi Arabia 
+
+C写死China-MainLand  Saudi Arabia
+
+
+
+C下载的时候 F列展示Destination Market (Drop Down) 值为：Saudi Arabia
+
+T下载的时候 F列保留Destination City (Drop Down) 值为 Daas接口里城市字段
+
+C下载的时候 N列会展示PKG均价
+
+
+
+
+
 
 
 
