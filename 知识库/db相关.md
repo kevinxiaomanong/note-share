@@ -446,9 +446,11 @@ undo log版本链形成：
 
 ### **5.3 binlog归档日志**
 
-binlog是逻辑日志，属于Mysql Server层日志，记录语句原始逻辑
+binlog是逻辑日志，属于Mysql Server层日志，记录语句原始逻辑，binlog为二进制日志
 
-Mysql的数据备份，主从架构需要依赖binlog同步数据，误操作恢复
+Mysql的数据备份，主从架构依赖binlog同步数据，误操作恢复，结合全量备份+binlog可以恢复到任意时间点
+
+要注意binlog记录的是逻辑操作（SQL语句/行变化）不是物理页的变化（redo log记载）
 
 
 
@@ -460,9 +462,23 @@ Mysql提供三种binlog格式：
 
 2、ROW 基于行
 
-不记录SQL语句而是记录每行数据的具体修改，日志体积大、写入性能略低
+不记录SQL语句而是记录每行数据的具体修改，日志体积大、写入性能略低，但主从绝对一致可精确恢复
 
 3、MIXED混合模式，默认使用statement格式，当检测到非确定性语句时自动切换为ROW格式
+
+强烈建议生产使用ROW格式，避免主从数据不一致的幽灵问题
+
+
+
+文件结构：
+
+1. 默认在datadir目录下
+2. mysql-bin.000001 mysql-bin.000002
+3. 索引文件 mysql-bin.index
+
+日志轮转（当前文件大小达到max_binlog_size 1GB默认||服务器重启||手动执行flush logs）
+
+每个binlog文件由多个Event组成
 
 
 
@@ -476,13 +492,32 @@ Mysql提供三种binlog格式：
 
 
 
+**最佳实践**
+
+- 生产环境必须开启binlog 格式设为ROW
+
+ROW格式可以有效避免幽灵问题：主库执行的SQL语句在从库重放时产生不同的结果导致主从数据不一致，例如NOW() 函数，自增主键顺序问题
+
+而ROW格式不记录SQL语句而是记录实际的数据变更，但ROW格式日志体积更大&主从复制传输更多数据，但现代存储和网络成本已经很低，数据一致性的重要性更强
+
+- 设置合理的过期时间 避免磁盘爆满
+
+
+
 **两阶段提交**
 
-redo log在事务执行过程中不断写入，binlog在事务提交时才写入，写入时机不一致
+为什么需要2PC？
 
-那么如果redo log写完后binlog异常，会导致数据不一致
+--在mysql中一个事务需要同时写入两个日志：
 
-需要协调redo log和binlog的写入顺序，确保数据库崩溃恢复时二者数据一致
+- redo log（Innodb引擎层）保证崩溃恢复
+- binlog (server层) 保证主从复制和数据恢复
+
+```
+先写redo log成功 后写binlog失败（服务器宕机）重启后Innodb通过redo log恢复事务，数据存在，但从库没有这个事务的binlog 主从不一致
+
+先写binlog成功 后写redolog失败，事务回滚数据不存在，但从库已经通过binlog执行了这个事务，主从不一致
+```
 
 
 
@@ -494,7 +529,7 @@ redo log在事务执行过程中不断写入，binlog在事务提交时才写入
 
 
 
-恢复流程：
+恢复原理：
 
 1、崩溃在prepare阶段之后，binlog写入之前
 
@@ -507,6 +542,16 @@ redo log在事务执行过程中不断写入，binlog在事务提交时才写入
 3、redo log commit之后
 
 均完整，事务正常提交
+
+
+
+重启流程：
+
+Mysql重启时检查所有处于prepare状态的事务，如果该事务对应的binlog存在，说明从库已经同步，则需要提交该事务，如果该事务对应的binlog不存在，要把该事务回滚
+
+而数据回滚其实依赖undo log
+
+
 
 
 
@@ -530,6 +575,32 @@ redolog: 崩溃后的数据修复，例如Mysql进程被意外kill，但数据�
 1、db崩溃后重启时通过redo log自动恢复已提交的未刷盘数据
 
 2、若存在误操作，先恢复最近的全量备份再通过binlog回放“全量备份完成时间~误操作前的增量日志”最终恢复到误操作前状态
+
+
+
+### 5.4日志的写入&刷盘
+
+redo log的刷盘策略受**innodb_flush_log_at_trx_commit**参数影响：
+
+- 0 事务提交时 redo log值留在InnoDB的内存buffer中 后台线程每秒将redo log buffer写入OS缓存并调用fsync刷盘 redo log **留在 MySQL 内存**，MySQL 崩溃会丢数据 性能最好但安全性最差
+- 1 事务提交时立即将redo log buffer写入OS缓存并调用fsync刷盘 redo log **立即刷盘**，任何崩溃都不会丢已提交事务，性能最差但最安全
+- 2 事务提交时将redo log buffer写入OS缓存 但不调用fsync刷盘 redo log **写入 OS 缓存**，MySQL 崩溃不会丢数据，但 OS 崩溃会丢 
+
+
+
+| 日志类型 | 写入时机          | 持久化时机          |
+| -------- | ----------------- | ------------------- |
+| undo log | 每条DML语句执行时 | 跟随redo log刷盘    |
+| redo log | 每条DML语句执行时 | 根据策略刷盘        |
+| binlog   | 事务COMMIT阶段    | 根据sync_binlog刷盘 |
+
+关键理解：undo log本身也是数据，对undo log的修改会产生redo log，所以undo log的持久化依赖于redo log的刷盘
+
+Mysql进程内存（redo log buffer 通过write系统调用 写操作系统内核缓存（page cache/buffer cache）--通过fsync() 或 OS后台刷盘 到物理磁盘（SSD/HDD）
+
+OS缓存是指操作系统的页缓存，当Mysql调用write系统调用写入redo log文件时，数据先被复制到OS的page cache，此时数据还在内存中尚未写入物理磁盘
+
+
 
 
 
@@ -574,6 +645,75 @@ Mysql分库分表是应对数据量增长的核心方案，通常单表超过100
 2、云方案
 
 注意拆分规则要稳定，尽量不修改否则数据迁移成本很高，尽量避免跨库跨表查询
+
+
+
+### 6.1主从复制
+
+```
+主库 (Master)                    从库 (Slave)
+┌─────────────┐              ┌─────────────────┐
+│  Binlog     │              │  Relay Log      │
+│  (二进制日志)│              │  (中继日志)     │
+└──────┬──────┘              └────────┬────────┘
+       │                              │
+       │ 1. Binlog Dump Thread        │ 3. SQL Thread
+       │◄─────────────────────────────┤ (执行SQL)
+       │                              │
+       │ 2. I/O Thread                │
+       └─────────────────────────────►│
+                                    └─────────────────┘
+```
+
+
+
+主从复制步骤：
+
+1. 主库记录binlog（只有已提交的事务才会写入binlog）
+2. 从库IO thread连接主库 请求从指定的binlog文件和位置开始发生日志
+3. 主库为每个从库创建一个binlog dump thread，来读取位置开始的binlog事件然后实时发送给从库IO线程
+4. 从库IO Thread写入Relay log，写入本地中继日志文件
+5. 从库执行Relay log 读取后重放事件，即在从库上重新执行相同操作
+
+
+
+不同格式binlog的复制细节
+
+Statement：从库执行SQL 可能主从不一致 NOW() RAND()函数
+
+Row：直接将users表中数据更新 
+
+mixed：Mysql来判断SQL是否安全，安全用statement不安全用row
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -676,7 +816,16 @@ InnoDB引擎使用聚簇索引来组织数据，主键即聚簇索引，数据�
 1. 提供跨公网Mysql数据库复制服务
 2. 公网加密传输binlog
 
-双向同步是两套独立对称的单向服务组成
+
+Relicator实现了mysql复制协议，伪装成Mysql Slave，向国内请求binlog后保存到本地磁盘
+
+Applier部署在海外，向国内的re请求binlog，通过JDBC协议写入海外mysql
+
+通过公网，Proxy（Redis、mongo同步都引入）通过四层tcp协议实现传输，接收二级制binlog，applier解析sql写入mysql
+
+这是单向的链路，反向海外到国内是对称的，双向复制是两套独立对称的单向服务组成
+
+
 
 上海和阿里云15ms 
 
@@ -690,7 +839,7 @@ IBU独立部署 有自己的VPC网络
 
 稳定性保证：
 
-因为公网是不稳定的，网络抖动会使得流量堆积，堆积完后就是突增
+因为公网是不可靠的，网络抖动会使得流量堆积，堆积完后就是突增，在每一个模块都有流控，底层用netty实现，当写buffer满了 读buffer满了 底层auto read
 
 1、发送接收都有流控 读写控制
 
@@ -698,13 +847,73 @@ IBU独立部署 有自己的VPC网络
 
 
 
-循环复制处理
+数据一致性保证:
 
-1. 
+循环复制问题：
+
+如果不处理，海外写，同步到目标机房的时候，反向的Relicator去拉取binlog的时候如果区分不出来是DRC写入的还是业务写的，会继续走链路回海外，出现无限循环，需要阻断循环
+
+原理：判断是在反向的replicator，业务数据库初始化建事务表：gtid_executed
+
+事务在binlog底层有几个事件：每个binlog文件由多个Event组成：
+
+常见类型：
+
+- `Format_desc_event`：文件头描述
+- `Query_event`：DDL 或 STATEMENT 格式的 DML
+- `Table_map_event`：ROW 格式中表的映射
+- `Write_rows_event` / `Update_rows_event` / `Delete_rows_event`：ROW 格式的具体变更
+- `Xid_event`：事务提交标记
+
+DRC复制是事务粒度，在begin完之后会执行一条语句update gtid_executed，这张表里面会放两个字段uuid1:id1
+
+DRC复制先写事务表，反向复制链路过滤事务表开头事务（这张事务表对业务隐藏，业务不会操作这种表）
+
+并且通过这个可以记录我同步复制的进度
+
+
+
+两个作用：
+
+1. 解决循环复制
+2. 记录位点信息，消费到哪里，崩溃重启时知道从对端哪里开始要
+
+
+
+避免冲突：
+
+两边同时insert数据，两边可能生成同一个id，双向复制的时候出现主键冲突，大概率数据不一致
+
+方案：
+
+1. 自增ID：分布式唯一ID 修改 auto_increment (increment=2N offsetM)
+
+双向复制时让两边生成不一样 让一边生成奇数一边生成偶数，或是1 2 3这样1 2 3 7
+
+
+
+产生冲突：多个机房同时修改同一条数据
+
+- 以时间戳最新的为准 新的数据复制到老的一边会commit 老的数据复制到新的一边会rollback
+- 用户可手动处理
 
 
 
 ### 8.3Dal Cluster
+
+Dal保障一点是：不允许出海的应用去访问国内的db
+
+国内和海外Dal Cluster会下发不同的连接串，海外的应用连海外，这是Dal实现的
+
+
+
+
+
+
+
+
+
+
 
 
 
