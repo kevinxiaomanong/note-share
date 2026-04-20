@@ -25,7 +25,13 @@ STA二期PRD：https://trip.larkenterprise.com/wiki/ZNTMwHSiSiw76Gk5gQUcYpd8nJe
 
 
 
+调节器前端：100062858
 
+调节器后端：100062742
+
+大屏后端：100055203
+
+大屏前端：100055739
 
 
 
@@ -985,9 +991,24 @@ List<StaTripHtlIndex> staTripHtlIndexList = safeGet(htlIndexFuture, Collections.
 
 
 
-3、代码优化 简洁
+#### GC算法
 
-使用peek优化
+目前海外目的地后端都使用JDK21来开发，不同与Java8，Java21基础镜像默认使用ZGC GC算法，其对堆外内存占用相对较多，在容器内存配置较低的情况下容易出现docker OOM，解决方案：
+
+- 升级服务器内存配置
+- 改用G1 GC算法
+- 人工降低Xmx，通过entraenv.sh中配置一个更低的Xmx，腾出更多的堆外可用空间
+- 人工降低Xms，Java21的基础镜像默认开启了ZUncommit功能，即支持之前申请的单现在不再使用的堆内存释放回OS，这样ZGC有更多的堆外可用空间
+
+
+
+-Xms -Xmx
+
+
+
+
+
+
 
 
 
@@ -1243,6 +1264,394 @@ C下载的时候 F列展示Destination Market (Drop Down) 值为：Saudi Arabia
 T下载的时候 F列保留Destination City (Drop Down) 值为 Daas接口里城市字段
 
 C下载的时候 N列会展示PKG均价
+
+
+
+## 内部工具review
+
+后端：https://captain.release.ctripcorp.com/app/100062742/info
+
+前端：https://captain.release.ctripcorp.com/app/100062858/info
+
+prd: https://trip.larkenterprise.com/wiki/Zke1wffX7iVbEhkRlp7cw5xEnzT
+
+https://idev2.ctripcorp.com/issueDetail/DATAIS-2159
+
+
+
+原始下载--->用到daas接口数据
+
+建议走STA本地缓存--快速
+
+
+
+建议写在外部看板前端 服务端做跨域处理
+
+写两个接口：
+
+
+
+
+
+1、清单关联删除需求
+
+uid关联-->
+
+
+
+删单时候判断关联
+
+
+
+CT excel下载变更
+
+月报加两个字段 
+
+
+
+sta_mkt_t_detail
+
+
+
+关联删除逻辑：
+
+
+
+前端点击删除按钮时 做预检 
+
+如果失败-->要给出提示错误原因 （C站目前错误原因：关联出来的订单 有使用优惠券）
+
+
+
+如果可以 
+
+```
+UPDATE sta_mkt_detail SET is_delete =%d WHERE id IN (%s)
+
+select ()uid from sta_mkt_detail where id IN(%s)
+
+```
+
+
+
+调节器前端：100062858
+
+调节器后端：100062742
+
+大屏后端：100055203
+
+
+
+修复一下：
+
+
+
+
+
+
+
+1、订单明细下载本身因为是全量，IO压力大，不建议再按spend聚合，程序性能不可控
+
+
+
+2、要求某些活动聚合某些活动又不聚合复杂度太高，需要给每条订单明细额外维护字段信息（是否需要聚合）后期维护费力度高，并且这个活动是否需要聚合本身变动也大
+
+
+
+3、后端无法控制excel下载样式，下载实现依赖记录与excel表格头匹配，我们可以把多条记录按Spending聚合成一条展示，但是不能某些字段（例如spending）聚合，某些字段（例如impression、click）又不聚合
+
+
+
+建议这个合并利用excel工具手动执行
+
+
+
+
+
+## 前端需求改造
+
+OrdConversion 整个sheet
+
+我们建议是写一个component 可以仿照ConversionPax的写法
+
+
+
+数据在Conversion层获取 通过props传递到组件里
+
+
+
+进度：现在我们已经能够拿到total数据+每个数据
+
+```
+<ConversionPax
+  type={type as 'Ctrip' | 'trip' | undefined}
+  paxData={paxData}
+  loading={paxLoading}
+  filterData={filterData}
+  selectedMonth={
+    Array.isArray(selectedMonth) ? selectedMonth[0] : selectedMonth
+  }
+  tripTotalPaxAll={tripTotalPaxAll}
+  selectedMarkets={selectedMarkets}
+/>
+```
+
+
+
+现在我们要仿照
+
+
+
+借鉴一下DET里面 中国地图的画法
+
+Source组件
+
+
+
+
+
+测试环境验收：
+
+外部看板：http://bdsci.overseas.fat0.tripqate.com/oversea/sta
+
+系数调节器前端：http://localhost:8080/web/sta/c-coefficient
+
+
+
+
+
+改动点如下：
+
+外部看板：PKG信息补充&客源城市排名地图&CT历史月聚合维度指标
+
+内部工具：T站营销活动数据上传模块&CT清单新增字段排序&看板发布检查T模块新增任务点
+
+
+
+// 检查父容器宽度
+console.log('Parent Width:', document.querySelector('.sta-trend-content').offsetWidth);
+console.log('Chart Div Width:', document.querySelector('.echarts-for-react').offsetWidth);
+console.log('Canvas Width:', document.querySelector('.echarts-for-react canvas').width);
+
+
+
+```
+const TrendItem: React.FC<TrendItemProps> = ({
+  // ... props
+}) => {
+  // ... 其他代码保持不变
+
+  const chartRef = useRef<any>(null);
+  const [hasResized, setHasResized] = useState(false);
+
+  // 确保在 DOM 渲染完成后触发 resize
+  useEffect(() => {
+    if (!chartRef.current) return;
+
+    const resizeChart = () => {
+      const chartInstance = chartRef.current.getEchartsInstance();
+      if (chartInstance) {
+        try {
+          chartInstance.resize();
+          setHasResized(true);
+        } catch (error) {
+          console.warn('ECharts resize failed:', error);
+        }
+      }
+    };
+
+    // 第一次：等待 DOM 渲染
+    const timer1 = setTimeout(() => {
+      resizeChart();
+      
+      // 第二次：确保 CSS 完全应用
+      setTimeout(() => {
+        resizeChart();
+        
+        // 第三次：再确认一次
+        setTimeout(() => {
+          resizeChart();
+        }, 300);
+      }, 200);
+    }, 100);
+
+    // 监听父容器尺寸变化
+    const parentElement = chartRef.current?.parentElement;
+    let resizeObserver: ResizeObserver | null = null;
+
+    if (parentElement) {
+      resizeObserver = new ResizeObserver((entries) => {
+        for (let entry of entries) {
+          if (entry.target === parentElement) {
+            // 只有在容器尺寸真正变化时才重新调整
+            resizeChart();
+          }
+        }
+      });
+      resizeObserver.observe(parentElement);
+    }
+
+    return () => {
+      clearTimeout(timer1);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+    };
+  }, []);
+
+  // ... render 函数保持不变
+  return (
+    <div className={`sta-trend ${className || ''}`}>
+      <div className="sta-trend-card">
+        <DataCard
+          // ... DataCard props
+        >
+          <div className="sta-trend-content">
+            <ReactECharts
+              ref={chartRef}
+              notMerge
+              style={{ height: '300px', width: '100%', display: 'block' }} // 确保 display: block
+              option={chartOption}
+              onEvents={{
+                legendselectchanged: handleLegendChange,
+              }}
+              opts={{ 
+                renderer: 'canvas', 
+                forceFit: true,
+                // 确保使用最新的 echarts 实例配置
+              }}
+            />
+            {renderDecisionLegend()}
+            {renderCustomLegend()}
+          </div>
+        </DataCard>
+      </div>
+    </div>
+  );
+};
+```
+
+
+
+### 九、Bug复盘
+
+一共是59条 只查出来54条
+
+字段缺失：
+
+```
+adCountry
+```
+
+
+
+
+
+
+
+
+
+16557
+
+16284
+
+ 273
+
+272
+
+被恢复了3
+
+275
+
+
+
+
+
+盘一下根因：
+
+现象：10 11月报pax对不上
+
+
+
+可以看到：
+
+10月份影响更大
+
+
+
+C都有回溯的操作
+
+
+
+删单逻辑：
+
+用户筛选一批oid，我们根据uid关联-->拿出表里所有的oid
+
+
+
+操作记录：更改删单记录表
+
+
+
+对10月：回溯所有is_delete=1 biz_month=2025/10 lasttime>11月即可
+
+验证数据是对的 1066
+
+
+
+对11月：先回溯is_delete=1 biz_month=2025/11 lasttime>12，然后再删掉461343这一单即可
+
+
+
+1、首先修复一下bug 加上月份限制
+
+2、新开发回溯接口
+
+
+
+
+
+
+
+
+
+
+
+
+
+11月差了273 
+
+
+
+461343 这条记录
+
+
+
+461371
+
+
+
+46
+
+
+
+如果还原回去 会多2pax 因此要把那2pax的单删掉，即要把461371删掉
+
+因为这条记录本来就是被删的 
+
+
+
+2025/10 1066
+
+11 273 275  还需要删掉 
+
+
+
+select * from sta_mkt_detail where biz_month = '2025/10' and datachange_lasttime > '2025-11-10' order by datachange_lasttime desc
+
+
+
+update sta_mkt_detail set is_delete = 0 where biz_month = ? and datachange_lasttime > ? and is_delete = 1
 
 
 
