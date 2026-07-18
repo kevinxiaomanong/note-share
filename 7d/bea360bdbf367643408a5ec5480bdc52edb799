@@ -1,0 +1,39 @@
+FrameWork/云.md
+  s_86b5af9e26d17d::t_53737f70a015cf 1-71
+AI/工具/vibeCoding.md
+  s_ad6cabac5ac0ac::t_81eabeedef3410 5-62
+AI/理论/构建高效Agent.md
+  s_f58048e38916de::t_f500824392fa4a 1-178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.34-trip",
+  "base_commit_sha": "7dbea360bdbf367643408a5ec5480bdc52edb799",
+  "prompts": {},
+  "sessions": {
+    "s_86b5af9e26d17d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0092eb6e-809c-4d29-925d-1855a7bcbd89",
+        "model": "arn:aws:bedrock:us-west-2:133197901387:application-inference-profile/f1o7fn3rqmi4"
+      },
+      "human_author": "haoxiang_zhang <haoxiang_zhang@trip.com>"
+    },
+    "s_ad6cabac5ac0ac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6d08689b-7a7a-4a34-b996-02effbcee7af",
+        "model": "arn:aws:bedrock:us-west-2:133197901387:application-inference-profile/f1o7fn3rqmi4"
+      },
+      "human_author": "haoxiang_zhang <haoxiang_zhang@trip.com>"
+    },
+    "s_f58048e38916de": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0ca6c9cb-7909-4367-bc5a-8fc30df4e4ef",
+        "model": "arn:aws:bedrock:us-west-2:133197901387:application-inference-profile/f1o7fn3rqmi4"
+      },
+      "human_author": "haoxiang_zhang <haoxiang_zhang@trip.com>"
+    }
+  }
+}
