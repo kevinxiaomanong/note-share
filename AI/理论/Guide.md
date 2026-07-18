@@ -402,6 +402,18 @@ LLM的缺陷：
 
 
 
+## Skills
+
+
+
+
+
+Skills和function calling应该是解耦的，有的skill全程不需要外部工具，例如CR expert，有的skill一路调脚本、MCP，所以不建议把Skill说成基于Function Calling的封装
+
+
+
+
+
 
 
 

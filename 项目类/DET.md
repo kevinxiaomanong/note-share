@@ -52,6 +52,10 @@ Swagger：
 
 http://det.coef.sci.ctripcorp.com/swagger-ui/index.html#
 
+Trip.com登录：
+
+https://pages.release.ctripcorp.com/ibu-gcc-group/ibu-account-group-doc/accounts/url.html
+
 
 
 ### 提点：
@@ -355,7 +359,7 @@ todo：
 
 
 [detteam@trip.com](mailto:detteam@trip.com)
-Dubai123.
+Dubai1234.
 
 
 
@@ -459,6 +463,48 @@ det为什么不对
 2025-10-20~2025-10-26   1.702 575
 
 2025-11-10~2025-11-16  1.602 570
+
+
+
+
+
+## 需求评审-0618
+
+
+
+订单&间夜量&uvpv：http://daas.ops.ctripcorp.com/api-config/1335
+
+
+
+具体每周指标：http://daas.ops.ctripcorp.com/api-config/1345
+
+
+
+
+
+### 元信息
+
+外部看板：https://captain.release.ctripcorp.com/app/100063568/info
+
+
+
+系数调节前端：https://captain.release.ctripcorp.com/app/100062858/info
+
+
+
+后端：https://captain.release.ctripcorp.com/app/100062742/info
+
+http://sci.coefficient.fws.qa.nt.ctripcorp.com/web
+
+
+
+
+
+把四个sheet拆分一下
+
+
+
+
 
 
 

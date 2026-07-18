@@ -463,7 +463,7 @@ index.html引用EROS，版本从qconfig的index.json里面读取
 
 
 
-46236
+
 
 
 
@@ -489,19 +489,33 @@ index.html引用EROS，版本从qconfig的index.json里面读取
 
 然后我们要看task_details哪些地方写入：run_threading_job 这有个定时hob，每天凌晨去跑这个job
 
-
-
 排查iq看板 NPS-独立出游-国内-2025Q47 projectid：4173
-
-
 
 4376 码值消失
 
-
-
-
-
 **码表替换**
+
+
+
+
+
+**code打码结果表同步**
+
+先找重复的判定：
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -511,7 +525,9 @@ index.html引用EROS，版本从qconfig的index.json里面读取
 
 ### 六、测试环境如何构建数据
 
-补充project-->补充tasks->补充answerSheet-->补充voc--->补充codes
+补充project-->补充locale_weight_id-->补充tasks->补充answerSheet-->补充voc--->补充codes
+
+
 
 4082
 
@@ -524,12 +540,6 @@ index.html引用EROS，版本从qconfig的index.json里面读取
 项目4082：
 
 问题task：4913623 问题ind_id 536
-
-
-
-
-
-
 
 5027
 
@@ -660,8 +670,179 @@ client = lark.Client.builder() \
 
 重要！邀您参加携程技术中心-平台研发中心满意度调研！ 您好，诚邀您参加携程技术中心-平台研发中心满意度调研。本次调研由携程集团服务研发中心牵头，旨在了解携程员工对平台研发中心的满意度感受，诚邀您作为员工代表，分享您对平台研发中心服务水平的体验。 点击此处（请用Chrome浏览器打开）感谢您的参与~ 如果您对本次调研有任何疑问，或是需要提供任何支持，请回复邮箱：调研及客户知识管理中心 diaoyan@trip.com
 
-
-
-
-
 6153
+
+数据修复：4859
+
+5214707-->zh-tw-->8212
+
+5214721-->ja-jp-->8226
+
+5216310--->zh-hk-->8268
+
+
+
+
+
+
+
+### 八、常见bug
+
+1、在锁定的时候经常会index out of list
+
+本质还是resultsave_taskdetail_v2的
+
+为什么归档的时候 v2经常失败呢？
+
+task被过滤了 没有有效的task 对task状态有filter
+
+
+
+
+
+2、计算nps job没有更新
+
+这里很奇怪 主动触发是可以运行的
+
+正常每天21:00有job
+
+本地debug一下看哪里被过滤了
+
+
+
+3、排查一下
+
+5909 拿去花
+
+
+
+
+
+待处理项目ID列表: [41, 82, 83, 86, 98, 139, 142, 153, 211, 221, 252, 267, 268, 269, 270, 271, 272, 273, 274, 277, 278, 279, 280, 351, 358, 365, 372, 463, 491, 687, 1065, 1135, 1142, 1198, 1233, 1240, 1247, 1345, 1450, 1499, 1513, 1534, 1562, 1639, 1646, 1653, 1660, 1681, 1688, 1695, 1702, 1779, 1926, 2143, 2311, 2318, 2325, 2332, 2339, 2346, 2353, 2360, 2367, 2374, 2381, 2388, 2395, 2500, 2556, 2577, 2612, 2906, 2913, 2920, 3242, 3403, 3438, 3480, 3515, 3522, 3536, 3550, 3557, 3571, 3578, 3592, 3599, 3606, 3732, 3739, 3830, 3865, 3879, 3893, 3907, 3914, 3935, 3942, 3949, 3956, 3970, 3984, 4005, 4033, 4173, 4215, 4229, 4306, 4320, 4390, 4432, 4446, 4460, 4474, 4488, 4502, 4544, 4558, 4572, 4586, 4593, 4607, 4649, 4663, 4684, 4691, 4712, 4789, 4810, 4824, 4929, 5013, 5069, 5083, 5125, 5153, 5237, 5279, 5293, 5300, 5321, 5328, 5335, 5349, 5356, 5363, 5370, 5391, 5398, 5405, 5412, 5419, 5433, 5440, 5447, 5454, 5461, 5706, 5713, 5720, 5727, 5734, 5741, 5748, 5755, 
+
+5762, 5769, 5776, 5783, 5790, 5797, 5804, 5811, 5818, 5825, 5832, 5839, 5846, 5853, 5860, 5867, 5874, 5881, 5888, 5895, 5902, 5909, 5916, 5923, 5930, 5937, 5944, 5951, 5958, 5965, 5972, 5979, 5986, 5993, 6000, 6007, 6014, 6021, 6028, 6035, 6042, 6049, 6056, 6063, 6070, 6077, 6084, 6091, 6098, 6105, 6112, 6119, 6133, 6154, 6175, 6182, 6189, 6196, 6203, 6210, 6217]
+
+
+
+
+
+3、26Q1
+
+trip flight 4901
+
+
+
+
+
+
+
+
+
+4、水印
+
+--legacy-peer-deps
+
+
+
+```JavaScript
+import Config from '@ctrip/web-core';
+Config.init({
+    AppID: '100035077', 
+});
+```
+
+
+
+
+
+```
+<script dangerouslySetInnerHTML={{
+ __html: `window['__CORE_SDK__'] = {
+     AppID: '100035077',
+     isOffline: true,    
+ };`
+}}>
+</script>
+{/*
+const dt = new Date()
+const ts = `${dt.getFullYear()}${dt.getMonth()+1}${dt.getDate()}`
+*/}
+{/* 可动态加上 query，拉取最新版本 */}
+<script src={`https://static.tripcdn.com/packages/ares/nfes-libs/*/core.js?ts=${ts}`} />
+```
+
+
+
+
+
+5、打码指标消失
+
+
+
+```
+export async function queryAuth(eid:string) {
+    const data = ({eid: eid, permissionCodes: ["FP54216"]})
+    const url = `${getIamService()}/verifyByBatchCode`;
+    return await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+    });
+}
+
+export const getIamService = () => {
+    var subEnv = getSubEnv();
+    switch (subEnv) {
+        case "fat":
+            return `http://offline.fx.fws.qa.nt.ctripcorp.com/soa2/22437`;
+        case "fws":
+            return `http://offline.fx.fws.qa.nt.ctripcorp.com/soa2/22437`;
+        case "uat":
+            return `http://offline.fx.fws.qa.nt.ctripcorp.com/soa2/22437`;
+        case "pro":
+            return `http://offline.fx.ctripcorp.com/soa2/22437`;
+    }
+    return `http://offline.fx.ctripcorp.com/soa2/22437`;
+};
+
+const response = await queryAuth(eid);
+const result = await response.json();
+permission = result.results.FP54216?.hasPermission || false;
+```
+
+
+
+
+
+
+
+6、 float() argument must be a string or a number, not 'NoneType'
+
+
+
+5153
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,4 +1,4 @@
-### 一、概述
+### ，一、概述
 
 BAT目前整合了Hickwall、BAT、Clog、ES kibana等多个监控系统
 
@@ -51,6 +51,43 @@ BAT将各种日志的入口统一，可以在一个界面上搜索各种日志�
 
 
 ### 五、日志接入
+
+Java日志生态分为两层：门面facade和实现impl
+
+slf4j日志门面 只是一套接口 代码只依赖slf4j接口，底层换Logback还是Log4j2，业务代码一行不改，类比JDBC你写Connection/PreparedStatement，底层可以是mysql或postgresql驱动
+
+实现有log4j和logback 
+
+```
+  <root level="INFO">                                                                                                                                                       
+      <appender-ref ref="TripLog"/>                                                                                                                                         
+      <appender-ref ref="Console"/>                                                                                                                                         
+  </root> 
+```
+
+level=info：info及以上warn、error会输出，debug被过滤掉
+
+一条日志会同时发送给所有appender
+
+appender是日志输出目的地
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 **客户端配置**
 

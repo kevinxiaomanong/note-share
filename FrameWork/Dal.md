@@ -97,6 +97,34 @@ Dal是依赖于Framework Foundation的环境配置，所以要设置好相应的
 
 
 
+这里关于insert有三种：
+
+1. insert 多事务、每个事务插入一条记录
+2. combinedInsert 以一条sql的形式插入
+3. batchInsert 在一个事务中一条接一条插入
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

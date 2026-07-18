@@ -122,7 +122,66 @@ http://bat.fx.ctripcorp.com/d/wpcA3tG7z/dp_starrocks?from=now-3h&to=now&var-clus
 
 
 
+### 排障
 
+
+
+需要信息：
+
+
+
+## SLB与前端架构
+
+TO_MNXH_334
+
+y2dv022z
+
+
+
+前端路由：patchRoutes用unshift插到最前，所以访问/时命中的是动态路由而非redirect
+
+```
+export function patchRoutes({routes}) {
+  if (routes.length) {
+    const userTypes = loginUser?.userType || [];
+    const module = !userTypes?.length ? 'traffic' : userTypes[0];
+    routes[0].routes.unshift({
+      path: '/',
+      name: module,
+      exact: true,
+      key: module,
+      pageId: pageIDs[module],
+      component: dynamic({
+        loader: () => import(`@/pages/${module}`),
+      }),
+    });
+  }
+}
+```
+
+
+
+
+
+访问index.html--->先走/api/user/current查询---> patchRoutes() 执行（路由还没渲染）                                                                                                                                  读 loginUser.userType[0]，动态插入 / → pages/{module}
+
+然后再调查询 结果存入initialState.currentUser给页面组件用
+
+
+
+后端UserLoginFilter拦截所有请求，SSO未登录直接返回/403重定向
+
+
+
+看current接口返回的userType字段里的内容：
+
+```
+const pageIDs = {
+  dashboard: '10650064208',
+  traffic: '10650064210',
+  monitor: '10650064212',
+};
+```
 
 
 
