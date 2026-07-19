@@ -97,6 +97,261 @@ starrocks不仅能高效地分析本地存储的数据，也可以作为计算�
 
 
 
+## 2、最佳实践
+
+### **分区与分桶**
+
+分区是按某个字段的值把数据物理切分成独立目录。
+
+/table/
+  dt=2026-07-01/   ← 一个分区目录
+    data.orc
+  dt=2026-07-02/
+    data.orc
+  dt=2026-07-03/
+    data.orc
+
+查询 WHERE dt = '2026-07-02' 时，直接跳过其他目录，只扫描对应分区 → 分区裁剪（Partition Pruning）。
+
+适合：时间（dt）、地区（region）、业务线（bu）等低基数、常作为过滤条件的字段。
+
+问题：字段基数太高（如 user_id）会产生百万级目录，元数据爆炸。
+
+---
+分桶（Bucket / Clustering）
+
+在分区内部，按某个字段做 hash 取模，把数据分散到固定数量的文件（桶）里。
+
+/table/dt=2026-07-01/
+  bucket_0.orc   ← user_id % 4 == 0 的数据
+  bucket_1.orc   ← user_id % 4 == 1 的数据
+  bucket_2.orc
+  bucket_3.orc
+
+优势：
+- Join 加速：两张表按同一字段分桶，Join 时同号桶直接配对，避免全量 Shuffle（Bucket Map Join）
+- 采样高效：TABLESAMPLE(BUCKET 1 OUT OF 4) 直接读 bucket_0，保证数据均匀
+- 数据倾斜缓解：hash 打散后每桶数据量相对均衡
+
+
+
+两者通常组合使用：先按dt分区控制扫描范围，再按user_id分桶提升Join性能
+
+典型数量：
+
+每个表100-10000分区，每个分区10-120个桶
+
+
+
+**分桶**
+
+分桶可以分为Hash Bucketing和Random Bucketing
+
+hash：
+
+通过对一个列或多个列进行哈希，将行分配到tablet，创建后tablet数量固定
+
+ 要求：
+
+- 必须预先选择一个稳定、均匀、高基数的键 防止哈希桶之间的数据倾斜
+- 初始选择合适的桶大小，理想每个bucket在1-10gb之间
+
+优势：
+
+- 选择性的过滤和join 触达更少的tablet
+- shuffle join
+
+劣势：
+
+- 如果数据分布倾斜，容易出现热点tablet
+- 数量静态
+
+
+
+```
+-- 事实表按 (customer_id) 哈希分桶并按天分区
+CREATE TABLE sales (
+  sale_id bigint,
+  customer_id int,
+  sale_date date,
+  amount decimal(10,2)
+) ENGINE = OLAP
+DISTRIBUTED BY HASH(customer_id) BUCKETS 48
+PARTITION BY date_trunc('DAY', sale_date)
+PROPERTIES ("colocate_with" = "group1");
+
+-- 维度表在相同键和桶数上哈希分桶，与销售表共置
+CREATE TABLE customers (
+  customer_id int,
+  region varchar(32),
+  status tinyint
+) ENGINE = OLAP
+DISTRIBUTED BY HASH(customer_id) BUCKETS 48
+PROPERTIES ("colocate_with" = "group1");
+
+
+-- StarRocks 可以进行分桶裁剪
+SELECT sum(amount) 
+FROM sales
+WHERE customer_id = 123
+
+-- StarRocks 可以进行本地聚合
+SELECT customer_id, sum(amount) AS total_amount
+FROM sales
+GROUP BY customer_id
+ORDER BY total_amount DESC LIMIT 100;
+
+-- StarRocks 可以进行Colocate Join
+SELECT c.region, sum(s.amount)
+FROM sales s JOIN customers c USING (customer_id)
+WHERE s.sale_date BETWEEN '2025-01-01' AND '2025-01-31'
+GROUP BY c.region;
+```
+
+- 分桶裁剪 where customer_id = 123这样的customer_id谓词可启用分桶裁剪，使查询仅访问一个tablet
+- 本地聚合：当哈希分布键是聚合键的子集时，sr可跳过洗牌聚合阶段
+- Colocate join 由于两个表共享桶数量和键，join时连接各自的tablet对
+
+
+
+random bucketing
+
+行按轮询分配，无需指定键，会在分区增大时动态拆分tablet，但每次查询会扫描分区内的所有tablet
+
+建议为随机分桶设置合适的桶大小 如1gb以启用自动拆分
+
+对哈希分桶监控tablet大小，单个tablet超过5-10gb之前重分片
+
+
+
+Sr支持在一个集群内使用多种存储介质，可以将新数据分区放在SSD盘，旧数据放SATA盘节省数据存储成本
+
+
+
+
+
+### 表聚簇
+
+即排序键设计，一个设计良好的排序键，用小而可预期的导入开销换来扫描时延、存储效率与CPU利用率的提升
+
+Starrocks的三层组织
+
+- 分区 低基数 如dt、region
+- 分桶 高基础 如user_id hash打散到各tablet
+- 排序 tablet内部按排序键有序存储
+
+
+
+
+
+## 3、表设计
+
+### catalog、database、table
+
+Starrocks使用Internal Catalog来管理内部数据，使用External Catalog来连接数据湖中的数据
+
+internal catalog可以包含一个或多个数据库，来存储、管理和操作SR中的数据例如表、物化视图、视图等
+
+每个集群都有且只有一个名为default_catalog的Internal Catalog，包含一个或多个数据库
+
+也可以将Starrocks作为查询引擎，直接查询湖上数据无需导入数据至starrocks，external catalog用于连接数据湖中的数据
+
+
+
+database是包含表、视图、物化视图等对象的集合
+
+
+
+
+
+table在sr里分内部表和外部表
+
+内部表归属于internal catalog的数据库，数据保存在SR中，物理上是按列存储，即一列数据经过分块编码压缩然后持久化存储，根据约束类型分为：主键表、明细表、聚合表和更新表，采用分区+分桶的两级数据分布策略实现均匀分布，且分桶以多副本形式均匀分布至BE节点保证高可用
+
+外部表的实际数据存在外部数据源，SR只保存表的元数据
+
+
+
+物化视图：特殊的物理表，存储基于基表的预计算结果，又分为同步物化视图和异步物化视图
+
+视图：也叫逻辑视图，是虚拟表不实际存储数据，每次在查询中引用某个视图时都会运行定义该视图的查询
+
+
+
+临时表：在处理数据时可能需要保存中间计算结果以便后续复用，临时表允许您将临时数据暂存在表中（例如 ETL 计算的中间结果），其生命周期与 Session 绑定，并由 StarRocks 管理。Session 结束时，临时表会被自动清除。临时表仅在当前 Session 内可见，不同的 Session 内可以创建同名的临时表。
+
+
+
+### 数据分布
+
+现代分布式数据库中常见的数据分布方式有：Round-Robin、Range、List和Hash
+
+
+
+分区键和分区粒度
+
+如果表单月数据量很小，其实可以按月分区，减少元数据数量，如果大部分查询精确到天可以按天分区有效分区裁剪
+
+正常一般选择时间进行分区以优化大量删除过期数据带来的性能问题 且方便冷热数据分级存储
+
+
+
+分桶设置：
+
+如果查询海量数据且查询时经常使用一些列作为条件列，建议用哈希分桶，这样在查询时只需要扫描和计算查询命中的少量分桶即可，默认是随机分桶
+
+哈希分桶建议使用高基数且常作为查询条件的列，但如果分桶列分布不均，根据二八规则可能造成数据倾斜，导致系统局部的性能瓶颈，需要调整分桶字段将数据打散
+
+
+
+短查询：扫描数据量不大、单机就能完成扫描的查询
+
+长查询：扫描数据量大、并行扫描能显著提升性能的查询
+
+
+
+
+
+对于 StarRocks 而言，分区和分桶的选择是非常关键的。在建表时选择合理的分区键和分桶键，可以有效提高集群整体性能。因此建议在选择分区键和分桶键时，根据业务情况进行调整。
+
+- **数据倾斜**
+
+  如果业务场景中单独采用倾斜度大的列做分桶，很大程度会导致访问数据倾斜，那么建议采用多列组合的方式进行数据分桶。
+
+- **高并发**
+
+  分区和分桶应该尽量覆盖查询语句所带的条件，这样可以有效减少扫描数据，提高并发。
+
+- **高吞吐**
+
+  尽量把数据打散，让集群以更高的并发扫描数据，完成相应计算。
+
+- **元数据管理**
+
+  Tablet 过多会增加 FE/BE 的元数据管理和调度的资源消耗。
+
+
+
+### 数据压缩
+
+SR支持对表和索引数据进行压缩，有助于节省存储空间+减少IO，但压缩和解压缩需要额外的CPU资源
+
+只能在创建表时设置后续无法修改，默认使用LZ4压缩算法，具有较为均衡的压缩比和解压缩性能
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
