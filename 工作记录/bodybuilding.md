@@ -1,4 +1,4 @@
-**背**
+### **背**
 
 背部的训练很细节 先从放松开始 更多的是激活
 
@@ -56,7 +56,7 @@
 
 
 
-**手臂-三头**
+### **手臂-三头**
 
 绳索下拉：
 
@@ -104,7 +104,7 @@
 
 
 
-**手臂-二头**
+### **手臂-二头**
 
 龙门架坐姿二头弯举：
 
@@ -136,7 +136,7 @@
 
 
 
-**肩**
+### **肩**
 
 哑铃推肩:
 
@@ -159,6 +159,12 @@
 - 大臂内收15-30度，下落不要下到底 把气吸满
 - 微微前倾 躯干稳定 不要后仰 向远向上
 
+脚可以窄一点、髋关节略微向后 上半身微微前倾 固定住上半身
+
+注意力放在上臂，驱动力是来自上臂 不要做成整个手臂的抬升 肘关节不要锁死 微屈一点
+
+此外还有一个容易导致肩峰撞击的点 肩膀角度内收15-30度
+
 
 
 蝴蝶机反向飞鸟：
@@ -169,54 +175,6 @@
 - 手肘屈的角度其实取决于感受 但这个角度应该是维持住的 否则三头就参与了
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-**肩膀**
 
 经典弹力带热身 正前方到正后方 双手保持张力
 
@@ -240,8 +198,6 @@
 
 如何选动作：能上重量、行程长
 
-
-
 前束 哑铃推肩
 
 肩关节活动度 不好的可以调后一点 不要完全垂直 把腰贴着 
@@ -254,19 +210,9 @@
 
 不要推直 推直很多人会送 控制能力不强
 
-
-
 大重量怎么起：
 
 哑铃放腿上面 靠近膝盖的位置 踮脚发力 回来的时候用腿去接
-
-
-
-中束：
-
-侧平举，尽量抬高一点 夹角差不多15度 重量大可以再大一点 微微前倾位 不要下到最底 相当于卸掉了
-
-把气吸满去做
 
 
 
@@ -278,6 +224,23 @@
 
 
 
+坐姿器械推肩
+
+器械高度一般握把和肩膀一样高或是坐得略低握把
+
+握把：直角握把，有两种方式，对握对肩膀前束的刺激会更强一点，重量也会大一点
+
+向前握会感觉肩膀扩张，对肩关节拉伸会更大一点，综合前束和中束，下落时候拉伸感强，更难
+
+但不管哪种握法，手腕都不要塌，竖直一点，向前握对手腕灵活度要求会更高一点
+
+靠背尽量带一点角度，减少反弓和腰的压力，保证下背和肩胛骨都贴紧
+
+轨迹就是竖直向上，在底部的时候保证你的肘关节是垂直的，垂直地面向地面落下来，不要产生肘关节向后，那样会拉伸到胸肌，而且那样会造成肩关节的翻转容易肩峰撞击
+
+向上推的时候不要肘关节锁死以及肩膀的回响，下放的高度其实握把和眼睛高度一致
+
+发力的时候在底端吸足一口气，做的时候千万不要产生身体的前伸
 
 
 
@@ -286,7 +249,10 @@
 
 
 
-**腿**
+
+
+
+### **腿**
 
 哑铃硬拉
 
@@ -328,7 +294,7 @@
 
 
 
-**胸**
+### **胸**
 
 保证杆落下来到胸肌中间偏下的位置 不建议人坐得太靠下 肩膀压力很大
 
@@ -346,23 +312,9 @@
 
 正常下落吸气 往上推呼气 呼气不要让胸塌下来 保持肩胛骨向内收紧
 
-
-
 可以把杆子放到板凳上看有没有对平
 
 
-
-
-
-
-
-
-
-
-
-
-
-imPublicSendNewActionCardMessage {"appId":"100043021","title":"数据外发审批系统","titleEn":"Data Export Approval Portal","traceId":"176aa6b7-9c4e-4b33-bfe9-1581c7a956e9","actionType":"100043021","accountId":"account-9551e15e","corpId":"ctrip","receiversType":1,"receivers":["S54755"],"infoList":[{"title":"需求名称","content":"2026上半年西安入境游数据"},{"title":"需求背景","content":"7月10日王老板与西安市领导会谈"},{"title":"核心字段","content":"2026年1.1-6.30  西安入境游人次与消费总额绝对值数据"},{"title":"是否需要绝对值","content":"是"},{"title":"是否需要个人信息","content":"否"},{"title":"是否有全国数据","content":"否"},{"title":"是否需要整体出入境（中国）数据","content":"否"},{"title":"是否需要明细数据（含订单、产品明细等）","content":"否"},{"title":"数据是否对外","content":"是"},{"title":"数据是否会出境","content":"否"},{"title":"哪些人会看到数据","content":"西安市人民政府"},{"title":"数据最晚提供时间","content":"2026-07-09 15:00:00"},{"title":"是否长期提供","content":"否"}],"infoListEn":[{"title":"Request Name","content":"2026上半年西安入境游数据"},{"title":"Request Background","content":"7月10日王老板与西安市领导会谈"},{"title":"Key Data Fields","content":"2026年1.1-6.30  西安入境游人次与消费总额绝对值数据"},{"title":"Absolute Numbers Required","content":"yes"},{"title":"Personal Information Required","content":"no"},{"title":"Nationwide Data for China Included","content":"no"},{"title":"Aggregated Cross-border (China) Data Required","content":"no"},{"title":"Detailed Data Required (Order and Product Details etc.)","content":"no"},{"title":"Data for External Use","content":"yes"},{"title":"Cross-border Data Transfer","content":"no"},{"title":"Intended Data Recipients","content":"西安市人民政府"},{"title":"Data Delivery Deadline","content":"2026-07-09 15:00:00"},{"title":"Long-term Data Provision Required","content":"no"}],"form":[{"label":"审批意见（拒绝时必填）","key":"opinion"}],"formEn":[{"label":"Approval Comments (required if rejected)","key":"opinion"}],"actionList":[{"type":1,"location":1,"text":"同意","param":{"traceId":"176aa6b7-9c4e-4b33-bfe9-1581c7a956e9","actionType":"100043021","accountId":"account-9551e15e","receiversType":1,"receivers":["S54755"],"status":null,"statusMsg":null,"statusMsgEn":null,"subtitleMsg":null,"subtitleMsgColor":null,"statusMsgColor":null,"disableAction":null,"form":[{"label":"审批意见（拒绝时必填）","key":"opinion"}],"action":"passed","demandId":8723,"roleType":"LEADER"},"requiredForms":[],"openUrl":null,"schemaUrl":null},{"type":1,"location":1,"text":"拒绝","param":{"traceId":"176aa6b7-9c4e-4b33-bfe9-1581c7a956e9","actionType":"100043021","accountId":"account-9551e15e","receiversType":1,"receivers":["S54755"],"status":null,"statusMsg":null,"statusMsgEn":null,"subtitleMsg":null,"subtitleMsgColor":null,"statusMsgColor":null,"disableAction":null,"form":[{"label":"审批意见（拒绝时必填）","key":"opinion"}],"action":"rejected","demandId":8723,"roleType":"LEADER"},"requiredForms":["opinion"],"openUrl":null,"schemaUrl":null},{"type":2,"location":1,"text":"详情","param":{"traceId":"176aa6b7-9c4e-4b33-bfe9-1581c7a956e9","actionType":"100043021","accountId":"account-9551e15e","receiversType":1,"receivers":["S54755"],"status":null,"statusMsg":null,"statusMsgEn":null,"subtitleMsg":null,"subtitleMsgColor":null,"statusMsgColor":null,"disableAction":null,"form":[{"label":"审批意见（拒绝时必填）","key":"opinion"}],"action":"detail","demandId":8723,"roleType":null},"requiredForms":[],"openUrl":"http://dataapprove.bdai.ctripcorp.com/web/examine/pcdetail?id=8723&action=examine","schemaUrl":"https://bd-dataapprove-detail.ctrip-it.com/demandDetailPhone.html?demandId=8723"}],"actionListEn":[{"type":1,"location":1,"text":"Approve","param":{"traceId":"176aa6b7-9c4e-4b33-bfe9-1581c7a956e9","actionType":"100043021","accountId":"account-9551e15e","receiversType":1,"receivers":["S54755"],"status":null,"statusMsg":null,"statusMsgEn":null,"subtitleMsg":null,"subtitleMsgColor":null,"statusMsgColor":null,"disableAction":null,"form":[{"label":"审批意见（拒绝时必填）","key":"opinion"}],"action":"passed","demandId":8723,"roleType":"LEADER"},"requiredForms":[],"openUrl":null,"schemaUrl":null},{"type":1,"location":1,"text":"Reject","param":{"traceId":"176aa6b7-9c4e-4b33-bfe9-1581c7a956e9","actionType":"100043021","accountId":"account-9551e15e","receiversType":1,"receivers":["S54755"],"status":null,"statusMsg":null,"statusMsgEn":null,"subtitleMsg":null,"subtitleMsgColor":null,"statusMsgColor":null,"disableAction":null,"form":[{"label":"审批意见（拒绝时必填）","key":"opinion"}],"action":"rejected","demandId":8723,"roleType":"LEADER"},"requiredForms":["opinion"],"openUrl":null,"schemaUrl":null},{"type":2,"location":1,"text":"More Details","param":{"traceId":"176aa6b7-9c4e-4b33-bfe9-1581c7a956e9","actionType":"100043021","accountId":"account-9551e15e","receiversType":1,"receivers":["S54755"],"status":null,"statusMsg":null,"statusMsgEn":null,"subtitleMsg":null,"subtitleMsgColor":null,"statusMsgColor":null,"disableAction":null,"form":[{"label":"审批意见（拒绝时必填）","key":"opinion"}],"action":"detail","demandId":8723,"roleType":null},"requiredForms":[],"openUrl":"http://dataapprove.bdai.ctripcorp.com/web/examine/pcdetail?id=8723&action=examine","schemaUrl":"https://bd-dataapprove-detail.ctrip-it.com/demandDetailPhoneEn.html?demandId=8723"}]} res:{"responseStatus":{"Timestamp":"/Date(1783567620735+0800)/","Ack":"Success","Errors":[],"Build":null,"Version":null,"Extension":[]},"feishuSendSuccessMembers":["S54755"],"feishuMsgIdMap":{"S54755":"om_x100b6bc51e896080b210753c05badc5"}}
 
 
 

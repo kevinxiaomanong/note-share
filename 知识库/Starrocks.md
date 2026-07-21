@@ -342,6 +342,41 @@ SR支持对表和索引数据进行压缩，有助于节省存储空间+减少IO
 
 
 
+## 4、数据湖
+
+starrocks湖仓一体方案重点在于：
+
+- 规范的Catalog及元数据服务集成
+- 弹性可扩展的计算节点（简称CN）
+- 灵活的缓存机制
+
+
+
+### Catalog
+
+数据目录，实现在一套系统内同时维护内、外部数据，外部数据源例如Hive、Iceberg、Hudi这种
+
+
+
+external catalog：用于连接外部metastore，可以创建不同类型数据源的external catalog，例如Hive catalog/Iceberg catalog/Jdbc catalog，在使用external catalog查询数据时，SR会用到外部数据源的两个组件：
+
+- 元数据服务 用于将元数据暴露给SR的FE进行查询规划
+- 存储系统 数据文件以不同格式存储在分布式文件系统或对象存储系统中，当FE将生成的查询计划分发给各个BE或CN后，会并行扫描存储系统的目标数据，
+
+
+
+但有的时候我们其实有跨catalog查询的场景，可以通过catalog_name.db_name.table_name的格式引用目标数据，例如一下其实是跨catalog的join查询
+
+```
+SELECT * FROM hive_catalog.hive_db.hive_table h JOIN default_catalog.olap_db.olap_table o WHERE h.id = o.id;
+```
+
+
+
+**Default Catalog**
+
+每个集群有且只有一个Internal Catalog
+
 
 
 
