@@ -8,11 +8,7 @@
 
 前端节点称为FE 后端节点有BE和CN（计算节点）两种类型
 
-
-
 当使用本地存储数据时需要部署BE,当数据存储在对象存储或HDFS时需要部署CN，SR不依赖任何外部组件，简化了部署和维护，节点可以水平扩展而不影响服务正常运行，且存在元数据和服务数据副本机制保障高可用
-
-
 
 且兼容Mysql协议 支持标准SQL 可以通过Mysql客户端连接到SR实时OLAP
 
@@ -26,15 +22,11 @@
 
 FE+BE节点 share-nothing架构 （CK就是典型的share-nothing架构）
 
-
-
 FE节点：元数据管理和执行计划构建，每个FE用berkeley db java版 在内存中存储和维护元信息的完整副本，具体的角色有
 
 1. leader节点 负责读写元数据 然后使用Raft协议将元数据更改同步到Follow节点和Observer节点，只有在元数据更改同步超一半的follower节点后数据写入才被认为成功，从技术实现上本质也是一个follower节点，是选举出来的，只有超过一半的follower节点活跃才可以主节点选举
 2. follower节点 只能读元数据
 3. Observer节点 从leader fe同步和重放日志以更新元数据，主要用于增加集群的查询并发，不参与主节点选举
-
-
 
 BE节点：
 
@@ -69,27 +61,7 @@ Scatter-Gather
 
 与很多数据分析系统采用的Scatter-Gather分布式执行框架不同，MPP分布式执行框架可以利用更多的资源处理查询请求，在Scatter-Gather框架中只有Gather节点能处理最后一级的汇总计算，而在MPP框架中数据会被Shuffle到多个节点并行汇总，在复杂计算时（高基数的group by、大表join）有明显性能优势
 
-
-
 对SR来说，查询被切分成多个Fragment，每个逻辑执行单元由一个或多个物理执行单元实现，节点间通过Exchange算子传递数据（shuffle/broadcast），在复杂计算时，MPP相比Scatter-Gather有明显模式
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 **向量化执行引擎**
 
@@ -402,30 +374,6 @@ external catalog：用于连接外部metastore，可以创建不同类型数据�
 ```
 SELECT * FROM hive_catalog.hive_db.hive_table h JOIN default_catalog.olap_db.olap_table o WHERE h.id = o.id;
 ```
-
-
-
-**Default Catalog**
-
-每个集群有且只有一个Internal Catalog
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1611,6 +1559,8 @@ Join操作通过关联条件将两个表中符合条件的记录组合成新纪�
 
 优势：时间复杂度低 相比嵌套来说从O（N*M）变成O（n+m） 相当于空间换时间
 
+弊病是如果内存不足，build的哈希表太大，内存装不下溢出到磁盘，性能断崖下降
+
 3、排序合并连接
 
 场景：两表数据量大，且关联键已排序
@@ -1633,13 +1583,15 @@ Join的底层执行算法
 
 **注意点**
 
-- LEFT JOIN左表是驱动表 
+- LEFT JOIN左表是驱动表 所以一般把小表放左边
 - 连接键加索引 ON条件的字段键索引可大幅加速
 - 多表JOIN 超过三张表时注意中间结果集膨胀 考虑拆分查询
 
 如果是inner join是优化器自由选择，一般用过滤后结果集更小的表作为驱动表
 
 如果是left/right join则必须用左/右表作为驱动表，因为语义要求保留左/右表所有行
+
+不建议三层以上的表join，多表join的代价是指数级增长的，建议在业务层拆分，不要一个sql搞定，可以分多次查询在代码里组装，或者做数据冗余，例如olap场景
 
 
 

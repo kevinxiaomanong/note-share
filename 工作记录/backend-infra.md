@@ -27,69 +27,7 @@ github迭代链路：Issue提出问题-->PR解决问题-->合并后自动关闭i
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Java相关
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 String：
 
@@ -100,8 +38,6 @@ String：
 **stringbuffer和stringbuilder**
 
 只是用于构建可变字符序列的工具类，而非string的可变版本，最终若要得到string对象，仍需调用tostring创建新的不可变string对象，Stringbuffer是线程安全的，方法加了synchronized，性能较低
-
-
 
 
 
@@ -585,7 +521,7 @@ do-while的语义 就是至少执行一次 这很贴近该业务场景
 
 
 
-synchronized的使用：
+**synchronized**
 
 1. 修饰实例方法 当前对象实例锁
 2. 修饰静态方法 当前class对象锁
@@ -593,15 +529,38 @@ synchronized的使用：
 
 尽量不要使用用字符串，因为字符串常量池有缓存功能
 
-
-
 构造方法天然线程安全，但如果里面涉及到共享资源的操作，其内部是可以用synchronized代码块的
 
 
 
 底层原理：
 
-可以通过javap去分析字节码，实现底层是monitorenter和monitorexit指令，分别是同步代码块的起止位置
+Java中每个对象都关联一个监视器Monitor，synchronized基于Monitor实现互斥，wait/notify也依赖monitor对象，这也是为什么只有在同步的块或方法中才能调用，可以通过javap去分析字节码层面，实现底层是monitorenter和monitorexit指令（正常退出或异常都会执行），分别是同步代码块的起止位置
+
+JVM层面是对象头的Mark Word存储锁状态，JDK6之后引入了锁升级机制，无锁、偏向锁（只有一个线程访问，MarkWord存线程ID）轻量级锁（多线程交替访问无竞争 CAS操作替换Mark Word）、重量级锁（依赖OS的Mutex，阻塞等待），只有到重量级锁MarkWord才存ObjectMointor的指针
+
+
+
+轻量级锁：线程会在自己的栈帧中创建锁记录，并CAS尝试把对象头的mark word替换为指向锁记录的指针，如果未抢到不会立即阻塞，而是进行自旋，避免操作系统层面线程挂起和唤醒的开销
+
+
+
+引入偏向锁/轻量级锁自适应优化后，在低竞争场景下性能接近无锁，高竞争时才退化为重量级锁的OS级阻塞
+
+重量级锁的Monitor结构：
+
+```
+{
+	_owner
+	_EntryList //等待获取锁的线程队列 Blocked
+	_waitSet //调用wait后等待的线程集合 waiting状态
+	_count 重入次数 支持可重入
+}
+```
+
+notify：将线程从waitset移到entrylist, 线程进入entrylist后被挂起，是否CPU
+
+
 
 monitorenter质量线程试图获取锁即对象监视器monitor的持有权，每个对象都内置了一个objectmonitor对象
 
@@ -638,8 +597,6 @@ struct ObjectMonitor{
 它是C++实现的结构体，属于JVM内部数据结构，存储在JVM分配的本地内存（OS层面的内存，非Java堆）
 
 Java对象头的Mark Work是连接Java对象和ObjectMonitor的核心，
-
-
 
 只有升级为重量级锁时，JVM才会创建ObjectMonitor，轻量级锁仅存储锁记录指针
 
@@ -716,15 +673,29 @@ try{
 
 
 
+加锁流程（非公平锁）：
+
+CAS(state : 0->1)成功 设置owner=当前线程 直接获取锁
+
+失败->acquire(1) 会再自旋重试一次 失败挂起
+
+非公平锁的插队：新来的线程会先尝试CAS抢锁，不管队列里有没有等待者
 
 
 
+条件变量Condition
 
+```
+Lock lock = new ReentrantLock();
+Condition notFull = lock.newCondition();
+Condition notEmpty = lock.newCondition();
+notFull.await(); //释放锁，加入Condition的等待队列
+notEmpty.signal(); //将节点从Condition队列转移到AQS队列 重新参与锁竞争
+```
 
+还有超时获取&可中断获取
 
-
-
-
+本质ReentrantLock在用户态通过CAS+自旋尽量避免陷入内核
 
 
 
@@ -752,11 +723,25 @@ exclusiveOwnerThread：指向当前持有锁的线程
 
 阻塞队列：AQS的CLH队列（双向链表）存储等待锁的线程
 
+然后通过CAS尝试修改同步状态
+
 
 
 **ThreadLocal**
 
 底层用ThreadLocalMap，Map是Entry[],是一个threadLocal的弱引用，弱引用只如果没有强应用下次gc会回收某个实例，导致key被回收
+
+
+
+引用链：
+
+Thread强引用ThreadLocalMap强引用Entry[] 
+
+Entry数组里的Entry:弱引用ThreadLocal对象+强引用value对象
+
+如果key设计为强引用，线程池内长期存活的Thread会导致无用的ThreadLocal对象无法被GC，改成弱引用后，threadlocal被回收，ThreadLocalMap在后续的get/set等操作会清理这些key为null的entry，但如果后续一直不调用，会导致value一直在Entry里，导致内存泄漏
+
+
 
 
 
@@ -795,6 +780,20 @@ Entry数组存活，导致value无法GC回收，但是Entry的key因为是弱引
 池化技术在线程管理上的体现，核心还有：数据库连接池、http连接池，核心都是减少每次获取资源的消耗，同时提高对资源的利用率，并提升可管理性
 
 线程资源必须通过线程池提供，不允许在应用中显示创建线程，且不要用Executors去构建，而是通过TheadPoolExecutor的构造函数，
+
+execute()和submit() submit把异常封装进Future 在Future.get的时候可以捕获 注意不要吞异常了
+
+
+
+**拒绝策略CallersRunPolicy与背压**
+
+背压的核心思想：当下游处理不过来时，反过来给上游施加压力，让上游减速，而不是让中间队列无限膨胀直至OOM，这样Tomcat线程提交任务被拒绝时自己执行任务，慢慢Tomcat线程池也耗尽新请求在TCP连接层排队
+
+
+
+实战推荐有界队列+合理容量+CallerRunsPolicy 这是绝大对数业务场景的最佳实践 天然自带流量削峰和背压能力
+
+
 
 
 
@@ -882,6 +881,20 @@ CompletableFuture的默认线程池ForkJoinPool.commonPool是全局共享的，�
 
 
 
+使用CompletableFuture要以正确的方式进行异常处理
+
+- exceptionally 只在阶段异常完成时执行 并用回调的返回值恢复为正常结果 
+- whencomplete 阶段正常或异常完成时执行回调
+- CompletableFuture.allof 可以等待多个阶段全部完成 只要其中一个阶段异常完成 返回的CompletableFuture也会异常完成 但仍需要检查各阶段
+
+使用CompletableFuture时建议传入自定义线程池，否则会默认用全局共享的ForkJoinPool.commonPool，无法做到有效隔离以及资源控制
+
+
+
+
+
+
+
 **AQS**
 
 Java早期的同步机制synchronized是JVM层面的，而JUC包需要用户态可自定义的同步逻辑（如可重入锁、倒计时器、信号量）如果每种同步器都从零去实现“等待队列/线程唤醒阻塞/状态管理”会大量重复造轮子
@@ -940,7 +953,7 @@ CLH队列里的线程状态：
 
 4、ReentrantLock
 
-其实AQS用一个volatile int state + 一个CLH等待队列，配合CAS，把线程排队等待资源这套逻辑抽象出来，子类只需定义state的含义和修改规则，其余全部复用即可
+其实AQS用一个volatile int state + 一个CLH等待队列+条件队列，配合CAS，把线程排队等待资源这套逻辑抽象出来，子类只需定义state的含义和修改规则，其余全部复用即可
 
 
 
@@ -992,7 +1005,25 @@ JDK在平台线程之上又加了一层调度：
 
 
 
+**实现原理**
 
+1、调度：
+
+平台线程依赖OS调度 虚拟线程由JVM调度
+
+
+
+2、挂载与卸载
+
+虚拟线程执行时会挂载到一个平台线程上执行 当遇到IO阻塞时 会从平台线程卸载下来 让其他虚拟线程挂载
+
+JDK21-23虚拟线程在synchronized块里被阻塞 可能会pinning 续发卸载 升级到JDK24
+
+
+
+3、栈管理
+
+平台线程的栈用的是固定大小的操作系统线程栈，默认是512kb可以调JDK参数修改，而虚拟线程栈以栈块对象的形式存放在堆中，可以随着执行过程增长和收缩，这是能够被大量创建的重要原因之一
 
 
 
@@ -1041,6 +1072,24 @@ JVM规范里有堆、栈、PC、方法区，但方法区的实现在JDK7之前�
 所以也许设置了-Xmx=4g 看一个实际java进程可能实际占用6g多，这其中多出来的可能有Metaspace、DirectBuffer、JIT缓存、JVM自身、线程栈这些占用
 
 所以如果有些时候你只盯着JVM层面看 其实看不出来为什么OOM被kill
+
+
+
+堆外有哪些内存区域：
+
+1、MetaSpace 元空间 方法区实现 动态生成类很多会触发增长
+
+2、线程栈 每个线程独占一块栈内存默认512kb-1mb 调整-Xss256k 节省内存
+
+3、JIT编译代码 JIT把热点方法编译成本地机器码后存在CodeCache
+
+4、直接内存 Direct Memory 由JVM管理但不在堆内 常用NIO
+
+5、GC数据结构 例如分代ZGC占据的堆外空间
+
+6、JVM自身代码
+
+
 
 
 
@@ -1148,10 +1197,6 @@ HotSpot里字符串常量池的实现是StringTable，可以理解为HashTable�
 
 2、缓存对象多（存活时间长），老年代增长快（频繁Full GC）--增大老年代比例
 
-3、
-
-
-
 
 
 
@@ -1215,11 +1260,173 @@ JVM进程的内存上线固定，若-Xss设为4m，创建4000个线程需要16GB
 
 
 
+**GC前置理论**
+
+引用类型：
+
+1. 强引用 最普遍的引用 有强引用 不可被回收
+2. 软引用 如果某对象只有软引用 会在内存压力较大时被回收
+3. 弱引用  ThreadLocalMap里的Entry就是一个弱引用 不管内存是否充裕 扫到就会回收
+4. 虚引用 搭配引用队列使用 接收对象可达性发生变化的通知
+
+
+
+如何判断对象死亡：
+
+- 引用计数法 有循环引用问题
+- 可达性分析算法 GC Root可达
+
 哪些对象可以作为GC Root对象：
 
 1. 栈里面引用的对象
 2. 方法区常量、静态变量
 3. 同步锁持有的对象。JNI引用的对象
+
+
+
+GC算法
+
+- 标记-清除
+- 复制 适合新生代
+- 标记-整理 适合老年代
+
+分代收集算法 对象假说 不同区域不同特征采用不同算法
+
+
+
+哪些情况下对象会进入老年代：
+
+1. 正常晋升 年龄达到阈值
+2. 大对象直接进入
+3. Young GC后 Survivor区放不下 多出的部分直接进入老年代
+
+
+
+
+
+**G1**
+
+Garbage-First从JDK9起成为默认，目标是throughput & latency balance
+
+传统GC如CMS把堆硬切成固定的Young/Old两块，固定大小，边界不可动
+
+G1把堆切成大量等大的Region（1-32MB JVM按照堆大小/2048），每个Region的角色可以动态分配，例如可以是Eden、Survivor、Old，可以不连续，在GC时不需要整理整个Old Gen，只需要挑垃圾最多的那些Region回收，这也是Garbage-First名字的由来
+
+G1除了Young GC、Full GC外还有Mixed GC即Young+部分Old 即选取若干垃圾密度最高的Old Region一并收集
+
+
+
+G1垃圾回收流程：
+
+1. 初始标记 STW 标记从GC Roots可直接引用的对象
+2. 并发标记 最耗时阶段 标记所有可达对象
+3. 最终标记 处理并发标记期间被修改的引用，少量STW
+4. 清理，根据标记结果，选择回收价值高即垃圾密度大的region，复制存活对象到新区域，回收旧区域内存，STW
+
+STAB：snapshot at the beginning，标记开始时给堆做一次逻辑快照，并发标记期间如果应用线程修改了某个引用，写屏障会把被删掉的旧引用记录在一个队列里，remark阶段再处理
+
+
+
+漏标问题：
+
+由于G1每次只收集部分Region，面临一个问题是，如果Old Region里有指针指向Eden Region的对象，GC时扫不到这条引用会漏标，G1的解法是为每个Region维护一个Remembered Set（RSet），这个Rset记录哪些外部region的哪些Card持有指向本region的引用，这样GC收集某个region时，直接查该region的rset就能找到所有外部引用，
+
+
+
+**分代ZGC**
+
+ZGC的核心目标是：无论堆多大，STW停顿时间都不超过1ms，代价是用更多的CPU和off-head内存换取极低延迟，这个目标决定了它几乎把所有GC工作都放到并发阶段，STW只做最短暂的几个节点
+
+低延迟服务的最大敌人是GC停顿，即垃圾回收期间的STW，当STW时所有应用线程全部暂停，等待GC结束后才能继续运行
+
+G1：throughput/latency balance
+
+ZGC: latency
+
+特性：
+
+- Concurrent 全链路并发 
+- Region-Based：和G1类似 ZGC也是基于区域的垃圾回收器
+- Compacting GC过程中会产生垃圾碎片 ZGC会进行内存整理
+- Using colored pointers：染色指针
+- Using load barriers 读屏障
+
+其中比较有意思的就是染色指针和读屏障
+
+
+
+染色指针：
+
+在64位的操作系统中，一个指针有64位，但是由于内存大小限制，其实有很多高阶位是用不上的，因此可以在指针的高阶位中嵌入一些元数据，这种在指针中存储元数据的技术叫做染色指针，以前的垃圾回收器都是用对象头来标记对象，而ZGC通过染色指针来标记。
+
+ZGC将一个64位的指针分为：
+
+前16位预留 + 4位染色位 + 44位表示对象的地址
+
+44位地址的寻址范围是16T，所以ZGC最大支持16T内存，中间四位分别是：
+
+- Finalizable：标识对象只能通过Finalizer访问
+- Remapped：标识对象是否在转移集中
+- Marked1：标记可到达对象
+- Marked0 ：标记可到达对象
+
+染色指针还用来实现对象地址的多重视图，分别对应三个虚拟地址
+
+
+
+读屏障：
+
+当应用程序从堆中读取对象引用时，JIT会向应用代码中注入一小段代码，在垃圾回收不同阶段，触发逻辑也有所不同：
+
+- 标记阶段 通过读屏障 可以让应用线程帮助GC线程一起完成对象的标记或重映射
+- 转移阶段：如果对象地址发生变化，还能自动实现对象转移
+
+
+
+但在ZGC出现前，Java内置的所有垃圾回收器都实现了分代回收，分代回收器之间可以搭配使用，分代的基本思想源自于弱分代假说，该假说认为绝大部分对象都是朝生夕死的，即年轻对象往往很快死去，老对象往往会保留下来，根据该假说，JVM又将内存区域划分为新生代和老年代，新生代又分为Eden区和两个Survivor区
+
+eden区用来分配新创建的对象，如果没有足够空间就触发一次young gc，用标记复制算法到另一个survivor区，如果GC后eden区还没有足够的空间存放新创建的对象或是survivor区某个对象存活时间超过一定阈值，就会晋升到老年代，如果老年代空间满了就会触发full gc，老年代GC频率很低一般用标记-整理算法
+
+
+
+因此在Java21中出现了分代ZGC，避免每次GC都扫描整个堆影响应用吞吐量，用-XX:+UseZGC -XX:+ZGenerational 使用
+
+
+
+**G1 vs ZGC**
+
+| 维度             | G1                  | 分代ZGC                |
+| ---------------- | ------------------- | ---------------------- |
+| 停顿类型         | STW                 | 接近0 STW（< 1ms）     |
+| 屏障类型         | 写屏障              | 读屏障                 |
+| CompressedOops   | 支持                | 不支持 引用8字节       |
+| off-heap堆外开销 | 较小                | 较大                   |
+| 适合堆大小       | 1-8GB               | 8GB以上才有明显优势    |
+| 适合场景         | 通用、报表、Web服务 | 超低延迟交易、实时系统 |
+
+从堆外内存角度来看：分代ZGC>ZGC>G1
+
+分代ZGC在ZGC的基础上还加了Remembered Set，因为分代ZGC引入Young/Old两代之后，需要跨代追踪，不然会漏标，ZGC本身有染色指针引用8字节、且有读屏障缓冲区，虚拟地址多重映射
+
+
+
+线上告警：K8s docker events oom  occurred!
+
+k8s看的是容器cgroup RSS即进程实际占用物理内存，不是JVM heap used，JVM heap是正常的，没有java.lang.OutOfMemoryError，进程被SIGKILL，JVM没有任何反应时间不会生成heap dump，日志会突然截断没有任何异常堆栈
+
+
+
+看Hickwall 容器RSS OOM kill时刻前的最后几条日志 看到Excel下载请求日志，基本断定Excel下载触发RSS超限，
+
+4w行全量加进堆，ZGC来不及回收 导致进程RSS超过4gb
+
+切G1GC
+
+
+
+
+
+
 
 
 
@@ -1576,6 +1783,7 @@ HashMap 是 key-value 键值对的存储结构，核心目标是在平均 O(1) �
 数组 + 链表 + 红黑树
 
       table[]
+
    ┌──────────┐
  0 │   null   │
    ├──────────┤
@@ -1591,6 +1799,7 @@ HashMap 是 key-value 键值对的存储结构，核心目标是在平均 O(1) �
 table 是一个 Node[] 数组，每个位置叫桶（bucket）。哈希冲突的元素挂在同一个桶后面，先用链表，链表长了转红黑树。
 
 ---
+
 二、核心字段和常量
 
 public class HashMap<K,V> {
@@ -1620,6 +1829,7 @@ public class HashMap<K,V> {
     
     // 结构修改次数（fail-fast 机制用）
     transient int modCount;
+
 }
 
 Node 结构（链表节点）：
@@ -1632,6 +1842,7 @@ static class Node<K,V> implements Map.Entry<K,V> {
 }
 
 ---
+
 三、hash 函数：扰动计算
 
 这是 HashMap 精妙的地方，直接看源码：
@@ -1653,6 +1864,7 @@ static final int hash(Object key) {
                                   ↑ 低位融合了高位信息
 
 ---
+
 四、定位桶：位运算代替取模
 
 // 桶索引 = (数组长度 - 1) & hash
@@ -1675,6 +1887,7 @@ hash = 27         = 00011011
 这就是为什么 HashMap 容量强制为 2 的幂，即使你传 new HashMap<>(10)，实际容量也会被调整为 16。
 
 ---
+
 五、put 操作全流程
 
 public V put(K key, V value) {
@@ -1734,6 +1947,7 @@ final V putVal(int hash, K key, V value, ...) {
     if (++size > threshold)
         resize();
     return null;
+
 }
 
 流程图：
@@ -1766,6 +1980,7 @@ put(key, value)
       扩容 resize
 
 ---
+
 六、get 操作
 
 public V get(Object key) {
@@ -1794,6 +2009,7 @@ final Node<K,V> getNode(int hash, Object key) {
         }
     }
     return null;
+
 }
 
 注意判断相等的写法：e.hash == hash && (e.key == key || key.equals(e.key))
@@ -1805,6 +2021,7 @@ final Node<K,V> getNode(int hash, Object key) {
 这就是为什么重写 equals 必须重写 hashCode——只重写 equals 时 hash 不同，直接定位到别的桶，equals 根本没机会执行。
 
 ---
+
 七、扩容 resize
 
 触发条件：size > threshold，即 size > capacity * 0.75。
@@ -1836,6 +2053,7 @@ if ((e.hash & oldCap) == 0) {
 不需要重新计算 hash，也不需要取模，一次位运算搞定。
 
 ---
+
 八、链表 → 红黑树的转换
 
 为什么需要红黑树？
@@ -1856,6 +2074,7 @@ if ((e.hash & oldCap) == 0) {
 理想哈希（泊松分布）下，桶里放 8 个元素的概率约 6×10⁻⁷，极小。达到 8 说明 hashCode 分布很差，才需要红黑树兜底。设 6 而不是 7 是为了防止在 7-8 边界反复转换。
 
 ---
+
 九、HashMap 的核心问题
 
 1. 线程不安全
@@ -1882,6 +2101,7 @@ key 应该是不可变对象（String、Integer、包装类）或至少 hashCode
 null key 的 hash 强制为 0，固定放在桶 0。ConcurrentHashMap 不允许 null，因为并发下无法区分 "key 不存在" 和 "key 对应 null"。
 
 ---
+
 十、扩展知识：HashMap vs 相关结构
 
 ┌───────────┬──────────────────┬────────────────────┬────────────┬─────────────────────────┐
@@ -1899,6 +2119,7 @@ null key 的 hash 强制为 0，固定放在桶 0。ConcurrentHashMap 不允许 
 └───────────┴──────────────────┴────────────────────┴────────────┴─────────────────────────┘
 
 ---
+
 十一、初始化时的容量选择
 
 工程实践：预估元素数量时，初始化传入容量，避免多次扩容。
@@ -1909,6 +2130,7 @@ Map<String, Object> map = new HashMap<>(128);  // 而不是默认16
 但更严谨的算法：初始容量 = (预期元素数 / 0.75) + 1，向上取到 2 的幂。Guava 提供了 Maps.newHashMapWithExpectedSize(100) 帮你算好。
 
 ---
+
 十二、一句话总结
 
 ▎ HashMap 用**"数组定位 + 链表处理冲突 + 红黑树兜底极端情况"的组合，配合 hash 扰动、2 的幂容量、扩容位运算优化，在平均 O(1) 内完成读写。它的每个设计细节都是性能和空间的权衡**，理解这些细节能帮你在实际工程里正确使用 Map 类容器
@@ -2220,7 +2442,7 @@ UTF-8使用1-4个字节为每个字符编码 UTF-16是2-4个字节 UTF-32是固�
 
 所谓字符编码：是将字符集中字符和二进制数据相互转换的一套映射规则
 
-所以乱码的本质是：编码和解码时用了不同的字符集
+所以乱码的本质是：编码和解码时用了不同的字符编码
 
 Mysql字符编码里有两套UTF-8编码实现：utf8和utf8mb4，后者可以支持emoji符号，建议使用后者，否则一些复杂字符会报错，此外还要注意JDBC连接的影响
 
@@ -2243,44 +2465,6 @@ DDL数据定义语言 DML
 
 
 mysql默认是隐式提交，每执行一条语句就把这条语句当成一个事务然后提交，当出现start transaction语句会关闭隐式提交 对应commit和rollback
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-- 
-
-
-
-
 
 
 
@@ -2475,7 +2659,7 @@ LIMIT 1000000,20;
 
 
 
-5、分库分表
+一般C端场景（上下滑动）用游标分页，B端后台需要跳页用延迟关联
 
 
 
@@ -3052,27 +3236,28 @@ lfu实现复用了redisObject里的lru字段24bit
 
 
 
+守护线程 vs 用户线程
+
+- 所有用户线程结束，JVM才推出，守护线程不影响
+- 用户线程：main线程、业务线程   守护线程：GC线程、watchdog（需要setDaemon true）
+
+正常情况应该业务线程主动停止守护线程
 
 
 
+这边看两个分布式锁的实际应用场景：
+
+1、库存超卖 以商品id为key 保证同一商品同一时刻只有一个请求能进入扣减流程
+
+2、幂等控制 以userId+orderToken为key 确保同一笔请求只被处理一次
+
+3、定时任务防重复执行，例如多实例部署时，每台机器都有定时任务调度器，同一任务会被多个实例同时触发，加分布式锁，抢到的执行
+
+4、缓存击穿重建 只让一个请求去查db重建缓存 其他请求等待
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+分布式锁一定要设置超时时间
 
 
 
@@ -3282,6 +3467,26 @@ Redis不保证原子性
 
 
 
+**缓存穿透、击穿、雪崩**
+
+穿透指的是非法&不合理的请求，要请求的数据不在db，自然cache也无法命中，导致流量都打到db，解决方案是缓存空对象和布隆过滤器（判断一个元素是否在海量元素里）
+
+击穿：热点key过期，导致突发大量流量打到db，都尝试重建热点cache，解决方案：分布式锁，控制一个线程去重建，或是热点key不过期
+
+雪崩：大量key 同时过期 请求都无法命中cache 都打到db 好像缓存服务不存在一样，解决方案：随机TTL，避免大量key同时过期
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3345,6 +3550,41 @@ maven本质是一个插件执行框架，所有执行过程是由一个个插件
 
 
 
+maven多module项目标准架构
+
+
+
+典型目录布局
+
+my-project/                     ← 根目录（Parent POM）
+├── pom.xml                     ← 父 POM，聚合所有模块
+├── my-common/                  ← 公共模块（工具类、实体、常量）
+│   └── pom.xml
+├── my-service/                 ← 业务逻辑模块
+│   └── pom.xml
+├── my-dao/                     ← 数据访问模块
+│   └── pom.xml
+└── my-web/                     ← Web 入口模块（打包成 WAR/JAR）
+    └── pom.xml
+
+
+
+父pom是整个多module核心，有两个关键标签：
+
+1、packaging为pom 
+
+2、聚合<modules>
+
+告诉maven这个项目包含哪些子模块
+
+3、依赖版本管理 统一管理版本
+
+子pom去继承parent
+
+构建时如果模块间互相依赖时 必须先install
+
+
+
 
 
 ## Git
@@ -3364,6 +3604,12 @@ git采用直接记录快照的方式存数据，大部分版本控制系统都�
 git项目存在三个工作区域：git仓库、工作目录、暂存区staging area
 
 暂存区的意义在于我们可以精细控制一次commit包含哪些内容，比如我们一次修改了10个文件，可以只先git add5个，让它门单独成一个commit
+
+
+
+
+
+
 
 
 
@@ -3465,13 +3711,33 @@ Spring AOP就是基于动态代理（jdk proxy接口 cglib子类），本质是�
 
 AspectJ：字节码操作、编译时类加载时织入
 
+springboot2.0之后默认改为CGLIB 
+
+
+
+在Bean初始化后，判断是否需要创建代理对象，调用代理方法时拦截器
+
+
+
 
 
 ### **事务**
 
+事务的ACID保证是由数据库引擎实现的，Spring本身不实现事务，它只是把如何开启/提交/回滚事务给自动化了，
+
+如果没有spring时我们需要去手动开启事务、提交和回滚，每个业务方法都需要重复这套模板，而且Connection需要传来传去，非常繁琐，用@transactional把模板代码注入进来，ThreadLocal绑定Connection
+
+
+
 spring支持声明式和编程式，一般就用声明式即@transactional注解去做，它对代码侵入少
 
 默认只有RuntimeException和Error会回滚，检查型异常不回滚，可以通过rollbackFor来指定
+
+
+
+事物传播行为 a调用b这个场景 由b的propagation来决定行为  此外是通过threadlocal把数据库connection绑定到当前线程 同一线程内所有dao操作复用这个连接
+
+但要注意这种在提交线程池任务的时候会失效 因为threadlocal没有传递 connection在threadlocal里
 
 
 
@@ -3543,13 +3809,23 @@ metai-inf下加载所以自动配置类，读取自动配置类全类名，然�
 
 第一层：singletonObjects 存放完整bean
 
-第二次：earlySingletonObjects 半成品 尚未进行属性填充
+第二次：earlySingletonObjects 半成品 实例化完成但尚未进行属性填充
 
-第三级：原始bean对象或代理对象
+第三级：原始bean对象或代理对象 存的是一个lambda 能生产早期引用
 
 本质是发生循环依赖，去第三级缓存拿objectfactory调用getobject（）来获取前期暴露对象，并将这个前期暴露对象放入二级缓存
 
 如果没有aop其实两级就行，三级缓存可以避免一个bean有多个代理对象
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3561,9 +3837,131 @@ metai-inf下加载所以自动配置类，读取自动配置类全类名，然�
 
 
 
+### 一致性哈希
+
+普通取模哈希 扩缩容的时候 几乎所有key的映射都变了 相当于全量数据迁移
+
+一致性哈希可以让迁移的数据尽可能少
+
+基本原理：哈希环，把【0,2的32次方】首尾相连构成圆环，先把节点上环，然后hash(key)%这个环落到位置后顺时针走，碰到的第一个节点就是它的归属节点，
+
+但仍存在数据倾斜问题，把物理节点在环上映射多个位置，让虚拟机节点均匀散步在环上，一般取100-200个
+
+实际应用如：Redis集群的hash slot，分配给节点
 
 
 
+
+
+### 分布式ID
+
+
+
+
+
+
+
+
+
+
+
+### 分布式事务
+
+当涉及到跨数据库db的时候 如何保证系统中多个相关联的数据库中的数据一致性？
+
+该场景依靠数据库事务是不够的，考虑到性能、可用性等方面我们无法完全满足ACID
+
+
+
+**一致性的3种级别**
+
+- 强一致性：系统写入什么，读出来就是什么
+- 弱一致性：不一定可以读取到最新写入的值，只是尽量保证某个时刻达到数据一致的状态
+- 最终一致性：弱一致性的升级版 系统保证在一定时间内达到数据一致的状态
+
+业界比较推崇是 最终一致性 但某些对数据一致要求十分严格的场景 比如银行转账还是要保证强一致性
+
+我们根据业务特性，通过适当的方式来保证系统数据的最终一致性，例如TCC、本地消息表、MQ事务等
+
+
+
+
+
+**TCC 补偿事务**
+
+TCC属于比较场景的柔性事务解决方案，思想是避免传统分布式事务、改用业务补偿的思路
+
+- Try  完成业务检查 并预留好必须的业务资源
+- Confirm  确认执行 当所有事务参与者的Try阶段执行成功 就会执行confirm 会处理try阶段预留的业务资源 
+- cancel 取消执行 释放try阶段预留的业务资源
+
+
+
+
+
+
+
+
+
+**本地消息表**
+
+以创建埋点为例，把创建埋点sql和写本地事务表 绑在一个db事务里
+
+```
+ INSERT INTO orders (...)                │                                                                                                                              
+  │  INSERT INTO message_table (             │                                                                                                                              
+  │      type='REGISTER_KEY',                │                                                                                                                              
+  │      payload='{keyName: xxx}',           │                                                                                                                              
+  │      status='PENDING',                   │                                                                                                                              
+  │      retry_count=0                       │                                                                                                                              
+  │  )                                       │                                                                                                                              
+  │  COMMIT;
+```
+
+然后有定时任务去消费本地事务表，去调用CData API注册key 成功更新事务状态 失败重试次数++ 
+
+超过阈值就告警
+
+
+
+**Saga 长事务编排**
+
+适合跨多个微服务的业务流程
+
+下单 Saga:
+  T1: 创建订单          C1: 取消订单
+  T2: 扣减库存          C2: 恢复库存
+  T3: 扣减余额          C3: 退还余额
+  T4: 发送通知          (无补
+
+正向: T1 → T2 → T3 → T4  全部成功
+异常: T1 → T2 → T3 ✗ → C2 → C1  反向
+
+每个 T 都是独立的本地事务，失败时通过补偿事务（C）来回滚 没有全局锁，没有同步等待
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+**CAP理论**
 
 
 
@@ -4005,38 +4403,3 @@ nginx适合用来做负载均衡：本身处于7层应用层，且自带健康�
 假如现在有25匹马，每次最多只能选5匹进行比赛，只能得到每场比赛的名次，，无法获得具体时间，问最少需要比赛找出最快的3匹马
 
 --7场
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
